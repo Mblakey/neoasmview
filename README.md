@@ -9,7 +9,7 @@ the invididual ASM files.
 ### Underlying Logic
 
 [x] - Prototype, show assembly from given functions parsed from compile_commands <br>
-[]  - test with library code, imported packages from CMake etc. <br>
+[x]  - test with library code, imported packages from CMake etc. <br>
 []  - client-server model, have my execs be able to run and accept multiple requests <br>
 []  - create hash tables and store function assembly for quick access <br>
 []  - have assembly regenerated on last edit change (see Make for logic) <br>
