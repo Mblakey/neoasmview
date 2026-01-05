@@ -1,0 +1,22 @@
+cmake_minimum_required(VERSION 3.15)
+project(asmview C)
+
+set(CMAKE_EXPORT_COMPILE_COMMANDS TRUE)
+
+
+
+# Add executable from source files
+add_executable(asm-filter
+  src/asm_filter.c
+  src/cJSON.c
+)
+
+target_compile_options(asm-filter PRIVATE -O3)
+target_include_directories(asm-filter PRIVATE include)
+
+# Build tests in a separate build dir with its own compile_commands.json
+add_custom_target(build_tests ALL
+    COMMAND ${CMAKE_COMMAND} -S ${CMAKE_SOURCE_DIR}/tests -B ${CMAKE_BINARY_DIR}/tests_build
+    COMMAND ${CMAKE_COMMAND} --build ${CMAKE_BINARY_DIR}/tests_build
+    COMMENT "Building tests in separate build dir"
+)
