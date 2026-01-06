@@ -10,8 +10,19 @@ add_executable(asm-filter
   src/cJSON.c
 )
 
+
+# Add executable from source files
+add_executable(asm-server
+  src/asm_server.c
+  src/asm_instance.c
+  src/cJSON.c
+)
+
 target_compile_options(asm-filter PRIVATE -O3)
 target_include_directories(asm-filter PRIVATE include)
+
+target_compile_options(asm-server PRIVATE -O3)
+target_include_directories(asm-server PRIVATE include)
 
 add_custom_target(simple_exec ALL
     COMMAND ${CMAKE_COMMAND} -S ${CMAKE_SOURCE_DIR}/tests/simple_exec -B ${CMAKE_BINARY_DIR}/tests/simple_exec
