@@ -18,24 +18,20 @@
 
 #include "cJSON.h"
 
+#include "asm_instance.h"
+
 #define PAGE_SIZE 4096
 #define ASM_WINDOW 4*PAGE_SIZE
 
+const char *infile; 
 const char *function_label; 
-const char *compile_commands_fname = "compile_commands.json"; 
-
-char infile[PATH_MAX]      = {0}; 
-char project_dir[PATH_MAX] = {0}; 
-char compile_commands_path[PATH_MAX] = {0};
-char rebuild_command[PATH_MAX] = {0}; 
-
-unsigned int asm_len;
-char asm_buffer[ASM_WINDOW]; 
-
 cJSON *compile_commands_json; 
 
+const char *compile_commands_fname = "compile_commands.json"; 
+char project_dir[PATH_MAX] = {0}; // reuse for compile_commands
 
-static bool search_file(const char *dirpath, const char *filename) {
+static bool search_file(const char *dirpath, const char *filename) 
+{
   DIR *dir = opendir(dirpath);
   if (!dir) {
     fprintf(stderr, "Error: [libc] opendir - %s\n", strerror(errno)); 
@@ -61,17 +57,15 @@ static bool search_file(const char *dirpath, const char *filename) {
 
 static bool find_compile_commands() {
 
-  strcpy(compile_commands_path, project_dir); 
-  strcat(compile_commands_path, "/"); 
-  
-  if (search_file(compile_commands_path, compile_commands_fname)) {
-    strcat(compile_commands_path, compile_commands_fname); 
+  strcat(project_dir, "/"); 
+  if (search_file(project_dir, compile_commands_fname)) {
+    strcat(project_dir, compile_commands_fname); 
     return true; 
   }
 
-  strcat(compile_commands_path, "../"); 
-  if (search_file(compile_commands_path, compile_commands_fname)) {
-    strcat(compile_commands_path, compile_commands_fname); 
+  strcat(project_dir, "../"); 
+  if (search_file(project_dir, compile_commands_fname)) {
+    strcat(project_dir, compile_commands_fname); 
     return true; 
   }
 
@@ -81,7 +75,7 @@ static bool find_compile_commands() {
 
 static cJSON* parse_compile_commands() 
 {
-  int fd = open(compile_commands_path, O_RDONLY);
+  int fd = open(project_dir, O_RDONLY);
   if (fd == -1) {
     fprintf(stderr, "Error: [libc] open - %s\n", strerror(errno)); 
     return NULL;
@@ -128,145 +122,6 @@ static cJSON* parse_compile_commands()
 }
 
 
-static cJSON* get_node_of_filename(const char *filename)
-{
-  /* 
-   * compile_commands.json has a specific structure
-   * this works for the minimal project 
-   */
-  cJSON *node = compile_commands_json->child; 
-  for (node = compile_commands_json->child; node; node = node->next) {
-    cJSON *name_node = cJSON_GetObjectItemCaseSensitive(node, "file");
-    char *str = cJSON_GetStringValue(name_node); 
-    if (name_node && strcmp(str, filename) == 0)
-      return node; 
-  }
-
-  return NULL; 
-}
-
-
-static bool create_rebuild_command(cJSON *file_node)
-{
-  cJSON *command_node = cJSON_GetObjectItemCaseSensitive(file_node, "command");
-  if (!command_node) { 
-    fprintf(stderr, "Error: could not find command field in compile_commands.json\n"); 
-    return false; 
-  }
-  
-  /* 
-   * parse keeping all the arguments apart from the -o path, 
-   * which we turn into -
-   */
-
-  char *str = cJSON_GetStringValue(command_node); 
-  const size_t len = strlen(str); 
-  
-  int j = 0; 
-  for (unsigned int i=0; i<len; i++) {
-    /* ignore the -o dash */
-    if (i<len-3 && 
-        str[i] == '-' && 
-        str[i+1] == 'o' && 
-        str[i+2] == ' ') 
-    {
-      i+=3; 
-      for (; i<len; i++) {
-        if (str[i] == ' ') {
-          i++; 
-          break; 
-        }
-      }
-
-      if (i==len-1) {
-        fprintf(stderr, "Error: command end seen before other flags\n");
-        return false; 
-      }
-    }
-
-    rebuild_command[j++] = str[i]; 
-  }
-
-  strcat(rebuild_command, " -S -g1 -fno-inline -fcf-protection=none -fno-unwind-tables -fno-asynchronous-unwind-tables -masm=intel -o -"); 
-  return true; 
-}
-
-
-static void filter_asm()
-{
-  FILE *p = popen(rebuild_command,"r");
-  if (!p) {
-    fprintf(stderr, "Error: [libc] popen - %s\n", strerror(errno)); 
-    return; 
-  }
-
-  asm_len = 0; 
-
-  char line_buffer[4096];
-  while (fgets(line_buffer, sizeof(line_buffer), p)) {
-
-    unsigned int state = 0; 
-    const size_t len = strlen(line_buffer);
-
-    for (unsigned int i=0; i<len && !state; i++) {
-      unsigned char ch = line_buffer[i]; 
-      switch (ch) {
-        case ' ':
-        case '\t':
-          break; 
-
-        case '.':
-          state = -1; 
-          break; 
-
-        default:
-          state = 1; 
-          break;
-      }
-    } 
-    
-    if (state == 1) {
-      if (asm_len + len >= ASM_WINDOW) {
-        fprintf(stderr, "Error: asm window buffer not large enough\n");
-        return; 
-      }
-
-      memcpy(asm_buffer+asm_len, line_buffer, len); 
-      asm_len += len; 
-    }
-  }
-  
-  asm_buffer[asm_len] = '\0'; // safety for strchr
-  pclose(p);
-
-  if (!asm_len)
-    return; 
-
-  char *prev = asm_buffer;  
-  char *ptr = asm_buffer;  
-
-  while ((ptr = strchr(ptr, '\n'))) {
-    // does the line start with <label>:
-    if (memcmp(function_label, prev, strlen(function_label)) == 0) {
-      fwrite(prev, ptr-prev+1, 1, stdout);
-      prev = ++ptr; 
-
-      while ((ptr = strchr(ptr, '\n'))) {
-        if (*prev != '\t')
-          break; 
-
-        fwrite(prev, ptr-prev+1, 1, stdout);
-        prev = ++ptr; 
-      }
-      return; 
-    }
-
-    prev = ++ptr; 
-  }
-  fprintf(stderr, "Error: no label named %s found in assembly output\n", function_label); 
-}
-
-
 static void display_usage()
 {
   fprintf(stderr, "asm-filter <project dir> <file> <label>\n"); 
@@ -276,6 +131,7 @@ static void display_usage()
 
 static void process_cml(int argc, char *argv[])
 {
+  infile = (const char*)NULL; 
   function_label = (const char*)NULL; 
 
   int j=0;
@@ -292,16 +148,8 @@ static void process_cml(int argc, char *argv[])
           }
           break; 
 
-      case 1: 
-          if (!realpath(ptr, infile)) {
-            fprintf(stderr, "Error: [libc] realpath - %s\n", strerror(errno)); 
-            display_usage(); 
-          }
-          break; 
-
-      case 2: 
-          function_label = ptr; 
-          break; 
+      case 1: infile = ptr; break; 
+      case 2: function_label = ptr; break; 
 
       default: display_usage(); 
     }
@@ -326,19 +174,33 @@ int main(int argc, char *argv[])
     fprintf(stderr, "Error: failed to parse compile_commands.json\n"); 
     return 1; 
   }
+
+  AsmInstance *inst = AsmInstance_alloc(); 
+
+  AsmInstance_set_filename(inst, infile); 
   
-  cJSON *file_node = get_node_of_filename(infile);
-  if (!file_node) {
+  if (AsmInstance_set_compile_node(inst, compile_commands_json) != ASM_INST_OK) {
     fprintf(stderr, "Error: file %s not found in parsed compile_commands.json\n", infile); 
-    return 1; 
+    return 1;
   }
 
   /* from this filenode, we can extract that commands used to 
    * create the object file */  
-  create_rebuild_command(file_node); 
+  if (AsmInstance_create_rebuild_cmd(inst) != ASM_INST_OK) {
+    fprintf(stderr, "Error: could not create rebuild cmd\n");
+    return 1; 
+  }
 
   /* that command gets parsed into our asm viewer */
-  filter_asm();
+  if (AsmInstance_compile_assembly(inst) != ASM_INST_OK)  {
+    fprintf(stderr, "Error: failed to compile filtered assembly\n");
+    return 1; 
+  }
+
+  if (AsmInstance_pipe_label(inst, function_label, stdout) != ASM_INST_OK) {
+    fprintf(stderr, "Error: failed to stream label assembly\n");
+    return 1; 
+  }
       
   cJSON_free(compile_commands_json); 
   return 0; 

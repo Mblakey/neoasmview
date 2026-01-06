@@ -6,6 +6,7 @@ set(CMAKE_EXPORT_COMPILE_COMMANDS TRUE)
 # Add executable from source files
 add_executable(asm-filter
   src/asm_filter.c
+  src/asm_instance.c
   src/cJSON.c
 )
 
