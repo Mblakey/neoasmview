@@ -1,16 +1,18 @@
 # NVIM Assembly Viewer
 
 Inspired by my love of GodBolt, but wanting to see real assembly outputs from large C projects that I work on. This repo contains the tooling 
-needed to view clean filtered assembly code from invididual function, using the CMake compile_commands.json as a guide for building 
-the invididual ASM files. 
+needed to view clean filtered assembly code from invididual functions while editing in some sort of IDE (nvim). This uses the CMake compile_commands.json 
+as a guide for building the invididual ASM files. <br>
+
+Like a compiler, this project should be able to optimise itself if assembly can be reviewed and streamlined as code is written. <br>
 
 ## RoadMap
 
 ### Underlying Logic
 
 [x] - Prototype, show assembly from given functions parsed from compile_commands <br>
-[x]  - test with library code, imported packages from CMake etc. <br>
-[]  - client-server model, have my execs be able to run and accept multiple requests <br>
+[x] - test with library code, imported packages from CMake etc. <br>
+[x] - client-server model 
 []  - create hash tables and store function assembly for quick access <br>
 []  - have assembly regenerated on last edit change (see Make for logic) <br>
 []  - create tooling for neovim plugin, use Treesitter as dependency for function hooking <br>
@@ -37,3 +39,14 @@ For example on the test suite:  <br>
 ./build/asm-filter ./build/tests/simple_exec ./tests/simple_exec/foo.c foo
 ```
 
+## Standalone Server 
+
+The server that can accept requests similar to the tool above is `asm-server`. This creates a pid specific socket (see logs)
+where <file> <label> arguements can be sent and evaulated live.
+
+```
+asm-server [project dir]
+```
+
+requests can then be sent using a common tools such as `nc`. <br>
+e.g `nc -U vimasm_<pid>.sock`
