@@ -17,3 +17,23 @@ the invididual ASM files.
 []  - live event hooking, assembly can change as the user types to show changes as they happen <br>
 []  - lua build system to work with Lazy <br>
 []  - full testing and release <br>
+
+
+## Standalone Tooling 
+
+The tooling for this project can be used outside of neovim for debugging/testing. Plus the server implementation should be quickly portable to other
+IDEs. 
+
+```
+asm-filter <project dir> <file> <label>
+```
+
+Project directory is the `dir` where `compile_commands.json` is located. <br>
+File is which source file the function is located in, and label is the function name. 
+
+For example on the test suite:  <br>
+
+```
+./build/asm-filter ./build/tests/simple_exec ./tests/simple_exec/foo.c foo
+```
+
