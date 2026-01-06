@@ -10,6 +10,8 @@
 #include <string.h>
 #include <errno.h>
 #include <limits.h>
+#include <fcntl.h>
+#include <unistd.h>
 
 #include "cJSON.h"
 
@@ -45,7 +47,8 @@ int    AsmInstance_set_compile_node(AsmInstance*, cJSON*) __nonnull((1,2));
 int    AsmInstance_create_rebuild_cmd(AsmInstance*) __nonnull((1)); 
 
 int    AsmInstance_compile_assembly(AsmInstance*) __nonnull((1));
-int    AsmInstance_pipe_label(AsmInstance *inst, char *label, FILE *ofp) __nonnull((1,2,3)); 
 
+int    AsmInstance_pipe_label(AsmInstance *inst, char *label, FILE *ofp) __nonnull((1,2,3)); 
+int    AsmInstance_write_label(AsmInstance *inst, char *label, int fd) __nonnull((1,2)); 
 
 #endif

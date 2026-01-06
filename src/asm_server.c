@@ -255,7 +255,55 @@ int main(int argc, char *argv[])
   char buffer[PATH_MAX]; 
   while ((bytes = read(client_fd, buffer, PATH_MAX)) > 0) {
     buffer[bytes] = '\0'; 
-    printf("%s", buffer);
+    char *newline = strchr(buffer, '\n'); 
+    if (newline)
+      *newline = '\0'; 
+    
+    /* the server expects 2 arguments per assembly output
+     * seperated by a space and terminated by an optional newline */
+
+    char *space = strchr(buffer, ' '); 
+    if (!space) {
+      fprintf(stderr, "[asm viewer] error - invalid request format\n"); 
+      continue;
+    }
+
+    char *file_name = buffer; 
+    char *label = space+1; 
+    *space = '\0'; 
+
+    AsmInstance *inst = AsmInstance_alloc(file_name); 
+
+    if (!inst) {
+      fprintf(stderr, "[asm viewer] error - failed to create asm instance\n");  
+      continue;
+    }
+
+    if (AsmInstance_set_compile_node(inst, compile_commands_json) != ASM_INST_OK) {
+      fprintf(stderr, "[asm viewer] error - file %s not found in parsed compile_commands.json\n", inst->infile); 
+      goto clean_up_instance;
+    }
+
+    /* from this filenode, we can extract that commands used to 
+     * create the object file */  
+    if (AsmInstance_create_rebuild_cmd(inst) != ASM_INST_OK) {
+      fprintf(stderr, "[asm viewer] error - could not create rebuild cmd\n");
+      goto clean_up_instance;
+    }
+
+    /* that command gets parsed into our asm viewer */
+    if (AsmInstance_compile_assembly(inst) != ASM_INST_OK)  {
+      fprintf(stderr, "[asm viewer] error - failed to compile filtered assembly\n");
+      goto clean_up_instance;
+    }
+
+    if (AsmInstance_write_label(inst, label, client_fd) != ASM_INST_OK) {
+      fprintf(stderr, "[asm viewer] error - failed to stream label assembly\n");
+      goto clean_up_instance;
+    }
+   
+clean_up_instance:
+    AsmInstance_free(inst); 
   }
  
   close(client_fd); 
@@ -264,30 +312,6 @@ int main(int argc, char *argv[])
   unlink(socket_path); 
 
 #if 0
-  AsmInstance *inst = AsmInstance_alloc(infile); 
-
-  if (AsmInstance_set_compile_node(inst, compile_commands_json) != ASM_INST_OK) {
-    fprintf(stderr, "Error: file %s not found in parsed compile_commands.json\n", infile); 
-    return 1;
-  }
-
-  /* from this filenode, we can extract that commands used to 
-   * create the object file */  
-  if (AsmInstance_create_rebuild_cmd(inst) != ASM_INST_OK) {
-    fprintf(stderr, "Error: could not create rebuild cmd\n");
-    return 1; 
-  }
-
-  /* that command gets parsed into our asm viewer */
-  if (AsmInstance_compile_assembly(inst) != ASM_INST_OK)  {
-    fprintf(stderr, "Error: failed to compile filtered assembly\n");
-    return 1; 
-  }
-
-  if (AsmInstance_pipe_label(inst, function_label, stdout) != ASM_INST_OK) {
-    fprintf(stderr, "Error: failed to stream label assembly\n");
-    return 1; 
-  }
 #endif
       
   cJSON_free(compile_commands_json); 

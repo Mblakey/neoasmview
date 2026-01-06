@@ -6,8 +6,10 @@ AsmInstance* AsmInstance_alloc(char *fname)
 {
   AsmInstance *inst = (AsmInstance*)malloc(sizeof(AsmInstance)); 
   memset(inst, 0, sizeof(AsmInstance)); 
-  if (!realpath(fname, inst->infile)) 
+  if (!realpath(fname, inst->infile)) {
+    free(inst); 
     return NULL; 
+  }
   return inst; 
 }
 
@@ -206,4 +208,37 @@ int AsmInstance_pipe_label(AsmInstance *inst, char *label, FILE *ofp)
 }
 
 
+int AsmInstance_write_label(AsmInstance *inst, char *label, int fd) 
+{
+  char *asm_buffer = inst->asm_buffer; 
+  if (!asm_buffer)
+    return ASM_INST_FAIL; 
+
+  char *prev = asm_buffer;  
+  char *ptr = asm_buffer;  
+
+  const size_t len = strlen(label); 
+
+  while ((ptr = strchr(ptr, '\n'))) {
+    // does the line start with <label>:
+    if (memcmp(label, prev, len) == 0) {
+      write(fd, prev, ptr-prev+1);
+      prev = ++ptr; 
+
+      while ((ptr = strchr(ptr, '\n'))) {
+        if (*prev != '\t')
+          break; 
+        
+        write(fd, prev, ptr-prev+1);
+        prev = ++ptr; 
+      }
+      return ASM_INST_OK; 
+    }
+
+    prev = ++ptr; 
+  }
+  
+  dprintf(fd, "Error: no label named %s found in assembly output\n", label); 
+  return ASM_INST_OK; 
+}
 

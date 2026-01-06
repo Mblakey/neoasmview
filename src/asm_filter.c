@@ -199,7 +199,9 @@ int main(int argc, char *argv[])
     fprintf(stderr, "Error: failed to stream label assembly\n");
     return 1; 
   }
-      
+  
+  AsmInstance_free(inst); 
+
   cJSON_free(compile_commands_json); 
   return 0; 
 }
