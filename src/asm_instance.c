@@ -2,10 +2,12 @@
 
 #include "asm_instance.h"
 
-AsmInstance* AsmInstance_alloc() 
+AsmInstance* AsmInstance_alloc(char *fname) 
 {
   AsmInstance *inst = (AsmInstance*)malloc(sizeof(AsmInstance)); 
   memset(inst, 0, sizeof(AsmInstance)); 
+  if (!realpath(fname, inst->infile)) 
+    return NULL; 
   return inst; 
 }
 
@@ -33,14 +35,6 @@ char* AsmInstance_get_filename(AsmInstance *inst)
 char* AsmInstance_get_cmd(AsmInstance *inst) 
 {
   return inst->rebuild_command; 
-}
-
-
-int AsmInstance_set_filename(AsmInstance *inst, char *fname) 
-{
-  if (!realpath(fname, inst->infile)) 
-    return ASM_INST_FAIL; 
-  return ASM_INST_OK; 
 }
 
 

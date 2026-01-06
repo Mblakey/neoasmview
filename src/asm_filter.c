@@ -175,10 +175,8 @@ int main(int argc, char *argv[])
     return 1; 
   }
 
-  AsmInstance *inst = AsmInstance_alloc(); 
+  AsmInstance *inst = AsmInstance_alloc(infile); 
 
-  AsmInstance_set_filename(inst, infile); 
-  
   if (AsmInstance_set_compile_node(inst, compile_commands_json) != ASM_INST_OK) {
     fprintf(stderr, "Error: file %s not found in parsed compile_commands.json\n", infile); 
     return 1;

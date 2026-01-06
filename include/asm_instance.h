@@ -34,14 +34,13 @@ typedef struct AsmInstance {
   
 } AsmInstance; 
 
-AsmInstance* AsmInstance_alloc(); 
+AsmInstance* AsmInstance_alloc(char *fname) __nonnull((1)); 
 void         AsmInstance_free(AsmInstance*) __nonnull((1)); 
 
 cJSON* AsmInstance_get_compile_node(AsmInstance *inst) __nonnull((1)); 
 char*  AsmInstance_get_filename(AsmInstance *inst) __nonnull((1)); 
 char*  AsmInstance_get_cmd(AsmInstance *inst) __nonnull((1)); 
 
-int    AsmInstance_set_filename(AsmInstance*, char*) __nonnull((1,2)); 
 int    AsmInstance_set_compile_node(AsmInstance*, cJSON*) __nonnull((1,2)); 
 int    AsmInstance_create_rebuild_cmd(AsmInstance*) __nonnull((1)); 
 
