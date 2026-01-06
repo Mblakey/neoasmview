@@ -12,8 +12,8 @@ Like a compiler, this project should be able to optimise itself if assembly can 
 
 [x] - Prototype, show assembly from given functions parsed from compile_commands <br>
 [x] - test with library code, imported packages from CMake etc. <br>
-[x] - client-server model 
-[]  - create hash tables and store function assembly for quick access <br>
+[x] - client-server model <br>
+[x] - create hash tables and store function assembly for quick access <br>
 []  - have assembly regenerated on last edit change (see Make for logic) <br>
 []  - create tooling for neovim plugin, use Treesitter as dependency for function hooking <br>
 []  - live event hooking, assembly can change as the user types to show changes as they happen <br>

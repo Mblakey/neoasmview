@@ -30,9 +30,10 @@ typedef struct AsmInstance {
   } flags; 
 
   cJSON *compile_node; 
+  unsigned long long time_changed; 
+
   char  *asm_buffer; 
   unsigned long long asm_buflen;
-  unsigned long long path_hash; 
   
 } AsmInstance; 
 

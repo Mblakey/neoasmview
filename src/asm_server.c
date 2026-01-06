@@ -2,6 +2,7 @@
 #include <stdlib.h>
 #include <stdio.h>
 #include <stdbool.h>
+#include <stdint.h>
 
 #include <string.h>
 
@@ -23,17 +24,15 @@
 
 #include "asm_instance.h"
 
+#define HT_SIZE 512
 #define PAGE_SIZE 4096
 #define ASM_WINDOW 4*PAGE_SIZE
-
-const char *infile; 
-const char *function_label; 
-cJSON *compile_commands_json; 
 
 const char *compile_commands_fname = "compile_commands.json"; 
 char project_dir[PATH_MAX] = {0}; // reuse for compile_commands.json path
 char socket_path[PATH_MAX] = {0}; 
 
+cJSON *compile_commands_json; 
 
 static void handle_sigint(int signum)
 {
@@ -188,6 +187,157 @@ static void process_cml(int argc, char *argv[])
 }
 
 
+struct hash_entry {
+  AsmInstance *inst;
+  struct hash_entry *next; 
+} strhash_entry; 
+
+
+struct hash_entry* hash_entry_alloc() 
+{
+  struct hash_entry *hte = (struct hash_entry*)malloc(sizeof(struct hash_entry)); 
+  memset(hte, 0, sizeof(struct hash_entry)); 
+  return hte; 
+}
+
+
+/*
+ * this algorithm (k=33) was first reported by dan bernstein many years ago 
+ * in comp.lang.c. another version of this algorithm (now favored by bernstein) 
+ * uses XOR: hash(i) = hash(i - 1) * 33 ^ str[i]; 
+ * the magic of number 33 (why it works better than many other constants, 
+ * prime or not) has never been adequately explained. 
+ */
+static uint16_t string_hash(const char *str)  
+{
+  int c;
+  unsigned long hash = 5381;
+  c = *str++;
+  while ((c = *str++)) 
+    hash = ((hash << 5) + hash) + c; /* hash * 33 + c */
+
+  return hash % HT_SIZE;
+}
+
+
+static AsmInstance* get_asm_instance(struct hash_entry *hash_table[], 
+                                     size_t ht_size, 
+                                     char *key)
+{
+  char expand_key[PATH_MAX]; 
+  if (!realpath(key, expand_key)) 
+    return NULL; 
+
+  uint16_t hash_idx = string_hash(key);    
+  struct hash_entry *slot = hash_table[hash_idx]; 
+  
+  while (slot) {
+    if (strcmp(expand_key, AsmInstance_get_filename(slot->inst)) == 0) {
+      fprintf(stderr, "found HASH\n"); 
+      return slot->inst; 
+    }
+    slot = slot->next;
+  }
+
+  AsmInstance *inst = AsmInstance_alloc(key); 
+
+  if (!inst) {
+    fprintf(stderr, "[asm viewer] error - failed to create asm instance\n");  
+    return NULL; 
+  }
+
+  if (AsmInstance_set_compile_node(inst, compile_commands_json) != ASM_INST_OK) {
+    fprintf(stderr, "[asm viewer] error - file %s not found in parsed compile_commands.json\n", inst->infile); 
+    free(inst); 
+    return NULL; 
+  }
+
+  /* from this filenode, we can extract that commands used to 
+   * create the object file */  
+  if (AsmInstance_create_rebuild_cmd(inst) != ASM_INST_OK) {
+    fprintf(stderr, "[asm viewer] error - could not create rebuild cmd\n");
+    free(inst);
+    return NULL; 
+  }
+
+  slot = hash_table[hash_idx]; 
+  if (!slot)
+    slot = hash_table[hash_idx] = hash_entry_alloc(); 
+  else {
+    while (slot->next) 
+      slot = slot->next; 
+    slot->next = hash_entry_alloc(); 
+    slot = slot->next; 
+  }
+
+  slot->inst = inst; 
+  return inst; 
+}
+
+
+/* for now not needed, as server quits on stop */
+static void free_hash_table(struct hash_entry *hash_table[], size_t ht_size)
+{
+  for (unsigned int i = 0; i < HT_SIZE; i++) {
+    struct hash_entry *slot = hash_table[i]; 
+    struct hash_entry *prev; 
+    while (slot) {
+      prev = slot; 
+      slot = slot->next; 
+      free(prev); 
+    }
+  }
+}
+
+
+int process_client_requests(int client_fd) 
+{
+  struct hash_entry *hash_table[HT_SIZE] = {NULL}; 
+
+  size_t bytes;
+  char buffer[PATH_MAX]; 
+  while ((bytes = read(client_fd, buffer, PATH_MAX)) > 0) {
+    buffer[bytes] = '\0'; 
+    char *newline = strchr(buffer, '\n'); 
+    if (newline)
+      *newline = '\0'; 
+    
+    /* the server expects 2 arguments per assembly output
+     * seperated by a space and terminated by an optional newline */
+
+    char *space = strchr(buffer, ' '); 
+    if (!space) {
+      fprintf(stderr, "[asm viewer] error - invalid request format\n"); 
+      continue;
+    }
+
+    char *file_name = buffer; 
+    char *label = space+1; 
+    *space = '\0'; 
+
+    AsmInstance *inst = get_asm_instance(hash_table, HT_SIZE, file_name);  
+
+    if (!inst) {
+      fprintf(stderr, "[asm viewer] error - failed to create asm instance\n");  
+      continue;
+    }
+
+    /* that command gets parsed into our asm viewer */
+    if (AsmInstance_compile_assembly(inst) != ASM_INST_OK)  {
+      fprintf(stderr, "[asm viewer] error - failed to compile filtered assembly\n");
+      continue;
+    }
+
+    if (AsmInstance_write_label(inst, label, client_fd) != ASM_INST_OK) {
+      fprintf(stderr, "[asm viewer] error - failed to stream label assembly\n");
+      continue;
+    }
+  }
+
+  return ASM_INST_OK; 
+}
+
+
 int main(int argc, char *argv[])
 {
   process_cml(argc, argv); 
@@ -251,69 +401,13 @@ int main(int argc, char *argv[])
   
   fprintf(stderr, "[asm viewer] client connected\n"); 
   
-  size_t bytes;
-  char buffer[PATH_MAX]; 
-  while ((bytes = read(client_fd, buffer, PATH_MAX)) > 0) {
-    buffer[bytes] = '\0'; 
-    char *newline = strchr(buffer, '\n'); 
-    if (newline)
-      *newline = '\0'; 
-    
-    /* the server expects 2 arguments per assembly output
-     * seperated by a space and terminated by an optional newline */
-
-    char *space = strchr(buffer, ' '); 
-    if (!space) {
-      fprintf(stderr, "[asm viewer] error - invalid request format\n"); 
-      continue;
-    }
-
-    char *file_name = buffer; 
-    char *label = space+1; 
-    *space = '\0'; 
-
-    AsmInstance *inst = AsmInstance_alloc(file_name); 
-
-    if (!inst) {
-      fprintf(stderr, "[asm viewer] error - failed to create asm instance\n");  
-      continue;
-    }
-
-    if (AsmInstance_set_compile_node(inst, compile_commands_json) != ASM_INST_OK) {
-      fprintf(stderr, "[asm viewer] error - file %s not found in parsed compile_commands.json\n", inst->infile); 
-      goto clean_up_instance;
-    }
-
-    /* from this filenode, we can extract that commands used to 
-     * create the object file */  
-    if (AsmInstance_create_rebuild_cmd(inst) != ASM_INST_OK) {
-      fprintf(stderr, "[asm viewer] error - could not create rebuild cmd\n");
-      goto clean_up_instance;
-    }
-
-    /* that command gets parsed into our asm viewer */
-    if (AsmInstance_compile_assembly(inst) != ASM_INST_OK)  {
-      fprintf(stderr, "[asm viewer] error - failed to compile filtered assembly\n");
-      goto clean_up_instance;
-    }
-
-    if (AsmInstance_write_label(inst, label, client_fd) != ASM_INST_OK) {
-      fprintf(stderr, "[asm viewer] error - failed to stream label assembly\n");
-      goto clean_up_instance;
-    }
-   
-clean_up_instance:
-    AsmInstance_free(inst); 
-  }
+  process_client_requests(client_fd); 
  
   close(client_fd); 
   close(server_fd); 
 
   unlink(socket_path); 
 
-#if 0
-#endif
-      
   cJSON_free(compile_commands_json); 
   return 0; 
 }
