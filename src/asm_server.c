@@ -318,18 +318,15 @@ int process_client_requests(int client_fd)
   if (newline)
     *newline = '\0'; 
   
-  /* the server expects 2 arguments per assembly output
+  /* the server expects 1-2 arguments per assembly output
    * seperated by a space and terminated by an optional newline */
-
-  char *space = strchr(buffer, ' '); 
-  if (!space) {
-    fprintf(stderr, "[asm viewer] error - invalid request format\n"); 
-    return ASM_INST_FAIL; 
-  }
-
+  char *label; 
   char *file_name = buffer; 
-  char *label = space+1; 
-  *space = '\0'; 
+  char *space = strchr(buffer, ' '); 
+  if (space) {
+    label = space+1; 
+    *space = '\0'; 
+  }
 
   AsmInstance *inst = get_asm_instance(hash_table, HT_SIZE, file_name);  
 
@@ -343,10 +340,18 @@ int process_client_requests(int client_fd)
     fprintf(stderr, "[asm viewer] error - failed to compile filtered assembly\n");
     return ASM_INST_FAIL; 
   }
-
-  if (AsmInstance_write_label(inst, label, client_fd) != ASM_INST_OK) {
-    fprintf(stderr, "[asm viewer] error - failed to stream label assembly\n");
-    return ASM_INST_FAIL; 
+  
+  if (space) {
+    if (AsmInstance_write_label(inst, label, client_fd) != ASM_INST_OK) {
+      fprintf(stderr, "[asm viewer] error - failed to stream label assembly\n");
+      return ASM_INST_FAIL; 
+    }
+  }
+  else {
+    if (AsmInstance_write_all(inst, client_fd) != ASM_INST_OK) {
+      fprintf(stderr, "[asm viewer] error - failed to stream assembly\n");
+      return ASM_INST_FAIL; 
+    }
   }
 
   return ASM_INST_OK; 

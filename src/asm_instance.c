@@ -257,3 +257,22 @@ int AsmInstance_write_label(AsmInstance *inst, char *label, int fd)
   return ASM_INST_OK; 
 }
 
+
+int AsmInstance_pipe_all(AsmInstance *inst, FILE *ofp) 
+{
+  char *asm_buffer = inst->asm_buffer; 
+  if (!asm_buffer || !inst->asm_buflen)
+    return ASM_INST_FAIL; 
+  fwrite(asm_buffer, inst->asm_buflen, 1, ofp); 
+  return ASM_INST_OK; 
+}
+
+
+int AsmInstance_write_all(AsmInstance *inst, int fd) 
+{
+  char *asm_buffer = inst->asm_buffer; 
+  if (!asm_buffer || !inst->asm_buflen)
+    return ASM_INST_FAIL; 
+  write(fd, asm_buffer, inst->asm_buflen); 
+  return ASM_INST_OK; 
+}

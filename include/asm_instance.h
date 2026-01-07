@@ -51,7 +51,9 @@ int    AsmInstance_create_rebuild_cmd(AsmInstance*) __nonnull((1));
 
 int    AsmInstance_compile_assembly(AsmInstance*) __nonnull((1));
 
-int    AsmInstance_pipe_label(AsmInstance *inst, char *label, FILE *ofp) __nonnull((1,2,3)); 
-int    AsmInstance_write_label(AsmInstance *inst, char *label, int fd) __nonnull((1,2)); 
+int    AsmInstance_pipe_label(AsmInstance*, char*, FILE*) __nonnull((1,2,3)); 
+int    AsmInstance_write_label(AsmInstance*, char*, int) __nonnull((1,2)); 
 
+int    AsmInstance_pipe_all(AsmInstance*, FILE*) __nonnull((1,2)); 
+int    AsmInstance_write_all(AsmInstance*, int) __nonnull((1)); 
 #endif
