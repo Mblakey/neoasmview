@@ -3,6 +3,7 @@
 #include <stdio.h>
 #include <stdbool.h>
 #include <stdint.h>
+#include <stdatomic.h>
 
 #include <string.h>
 
@@ -12,6 +13,7 @@
 #include <libgen.h>
 #include <dirent.h>
 #include <fcntl.h>
+#include <poll.h>
 #include <signal.h>
 
 #include <sys/types.h>
@@ -34,11 +36,11 @@ char socket_path[PATH_MAX] = {0};
 
 cJSON *compile_commands_json; 
 
-static void handle_sigint(int signum)
+static volatile sig_atomic_t exit_flag = 0; 
+
+static void exit_from_signal(int signum)
 {
-  if (*socket_path)
-    unlink(socket_path); 
-  exit(1); 
+  exit_flag = 1; 
 }
 
 
@@ -288,48 +290,63 @@ static void free_hash_table(struct hash_entry *hash_table[], size_t ht_size)
 }
 
 
+/* move to a nonblocking model using poll */
 int process_client_requests(int client_fd) 
 {
   struct hash_entry *hash_table[HT_SIZE] = {NULL}; 
 
-  size_t bytes;
-  char buffer[PATH_MAX]; 
-  while ((bytes = read(client_fd, buffer, PATH_MAX)) > 0) {
-    buffer[bytes] = '\0'; 
-    char *newline = strchr(buffer, '\n'); 
-    if (newline)
-      *newline = '\0'; 
-    
-    /* the server expects 2 arguments per assembly output
-     * seperated by a space and terminated by an optional newline */
-
-    char *space = strchr(buffer, ' '); 
-    if (!space) {
-      fprintf(stderr, "[asm viewer] error - invalid request format\n"); 
-      continue;
+  char buffer[PATH_MAX+1]; 
+  size_t bytes = read(client_fd, buffer, PATH_MAX); 
+  
+  if (bytes == -1) {
+    // no data ready, just return to poll loop
+    if (errno == EAGAIN || errno == EWOULDBLOCK) 
+      return ASM_INST_OK;
+    else {
+      fprintf(stderr, "Error: [libc] read - %s\n", strerror(errno)); 
+      return ASM_INST_FAIL; 
     }
+  }
 
-    char *file_name = buffer; 
-    char *label = space+1; 
-    *space = '\0'; 
+  if (bytes == 0) {
+    fprintf(stderr, "[asm viewer] client disconneted\n");  
+    return ASM_INST_OK;
+  }
 
-    AsmInstance *inst = get_asm_instance(hash_table, HT_SIZE, file_name);  
+  buffer[bytes] = '\0'; 
+  char *newline = strchr(buffer, '\n'); 
+  if (newline)
+    *newline = '\0'; 
+  
+  /* the server expects 2 arguments per assembly output
+   * seperated by a space and terminated by an optional newline */
 
-    if (!inst) {
-      fprintf(stderr, "[asm viewer] error - failed to create asm instance\n");  
-      continue;
-    }
+  char *space = strchr(buffer, ' '); 
+  if (!space) {
+    fprintf(stderr, "[asm viewer] error - invalid request format\n"); 
+    return ASM_INST_FAIL; 
+  }
 
-    /* that command gets parsed into our asm viewer */
-    if (AsmInstance_compile_assembly(inst) != ASM_INST_OK)  {
-      fprintf(stderr, "[asm viewer] error - failed to compile filtered assembly\n");
-      continue;
-    }
+  char *file_name = buffer; 
+  char *label = space+1; 
+  *space = '\0'; 
 
-    if (AsmInstance_write_label(inst, label, client_fd) != ASM_INST_OK) {
-      fprintf(stderr, "[asm viewer] error - failed to stream label assembly\n");
-      continue;
-    }
+  AsmInstance *inst = get_asm_instance(hash_table, HT_SIZE, file_name);  
+
+  if (!inst) {
+    fprintf(stderr, "[asm viewer] error - failed to create asm instance\n");  
+    return ASM_INST_FAIL; 
+  }
+
+  /* that command gets parsed into our asm viewer */
+  if (AsmInstance_compile_assembly(inst) != ASM_INST_OK)  {
+    fprintf(stderr, "[asm viewer] error - failed to compile filtered assembly\n");
+    return ASM_INST_FAIL; 
+  }
+
+  if (AsmInstance_write_label(inst, label, client_fd) != ASM_INST_OK) {
+    fprintf(stderr, "[asm viewer] error - failed to stream label assembly\n");
+    return ASM_INST_FAIL; 
   }
 
   return ASM_INST_OK; 
@@ -340,7 +357,13 @@ int main(int argc, char *argv[])
 {
   process_cml(argc, argv); 
 
-  signal(SIGINT, handle_sigint);
+  struct sigaction sa = {0};
+  sa.sa_handler = exit_from_signal;
+  sigemptyset(&sa.sa_mask);
+  sa.sa_flags = 0;  // important: no SA_RESTART
+  sigaction(SIGINT, &sa, NULL);
+  sigaction(SIGTERM, &sa, NULL);
+  signal(SIGPIPE, SIG_IGN);
   
   if (!find_compile_commands()) {
     fprintf(stderr, "Error: could not find compile_commands.json\n"); 
@@ -378,14 +401,17 @@ int main(int argc, char *argv[])
     fprintf(stderr, "Error: [libc] bind - %s\n", strerror(errno)); 
     return 1; 
   }
-
+  
+  // might change this to a umask in future
   if (chmod(socket_path, 0600) != 0) {
     fprintf(stderr, "Error: [libc] chmod - %s\n", strerror(errno)); 
+    unlink(socket_path); 
     return 1; 
   }
 
   if (listen(server_fd, 1) != 0) {
     fprintf(stderr, "Error: [libc] listen - %s\n", strerror(errno)); 
+    unlink(socket_path); 
     return 1; 
   }
 
@@ -394,13 +420,45 @@ int main(int argc, char *argv[])
   int client_fd = accept(server_fd, NULL, NULL); 
   if (client_fd == -1) {
     fprintf(stderr, "Error: [libc] accept - %s\n", strerror(errno)); 
+    unlink(socket_path); 
     return 1; 
   }
-  
+
+  /* 
+   * non blocking read calls, allow signal to pass through to 
+   * kill process
+   */
+  int flags = fcntl(client_fd, F_GETFL, 0); 
+  if (fcntl(client_fd, F_SETFL, flags | O_NONBLOCK) != 0) {
+    fprintf(stderr, "Error: [libc] fcntl - %s\n", strerror(errno)); 
+    unlink(socket_path); 
+  }
+
   fprintf(stderr, "[asm viewer] client connected\n"); 
+
+  struct pollfd fds[1]; 
+  fds[0].fd = client_fd; 
+  fds[0].events = POLLIN; 
   
-  process_client_requests(client_fd); 
- 
+  fprintf(stderr, "[asm viewer] polling client...\n"); 
+
+  while (!exit_flag) {
+    int ret = poll(fds, 1, 500); 
+    if (ret == -1) {
+      fprintf(stderr, "Error: [libc] poll - %s\n", strerror(errno)); 
+      break; 
+    }
+
+    if (ret == 0) continue;
+
+    if (fds[0].revents & POLLIN) 
+      process_client_requests(client_fd); 
+
+    // Client closed connection or error
+    if (fds[0].revents & (POLLHUP | POLLERR)) 
+      break;
+  }
+  
   close(client_fd); 
   close(server_fd); 
 
