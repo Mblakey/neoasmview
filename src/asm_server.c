@@ -232,10 +232,8 @@ static AsmInstance* get_asm_instance(struct hash_entry *hash_table[],
   struct hash_entry *slot = hash_table[hash_idx]; 
   
   while (slot) {
-    if (strcmp(expand_key, AsmInstance_get_filename(slot->inst)) == 0) {
-      fprintf(stderr, "found HASH\n"); 
+    if (strcmp(expand_key, AsmInstance_get_filename(slot->inst)) == 0) 
       return slot->inst; 
-    }
     slot = slot->next;
   }
 

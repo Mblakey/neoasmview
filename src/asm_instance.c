@@ -119,6 +119,20 @@ int AsmInstance_compile_assembly(AsmInstance *inst)
   if (!cmd)
     return ASM_INST_FAIL; 
 
+  /* first check if there has been a modification */
+  
+  const char *file = AsmInstance_get_filename(inst); 
+  if (*file == '\0')
+    return ASM_INST_FAIL; 
+
+  struct stat sb; 
+  if (lstat(file, &sb) != 0) 
+    return ASM_INST_FAIL;
+
+  /* assembly will still be valid */
+  if (sb.st_mtime == inst->time_changed) 
+    return ASM_INST_OK;  
+
   FILE *p = popen(cmd,"r");
   if (!p) {
     fprintf(stderr, "Error: [libc] popen - %s\n", strerror(errno)); 
@@ -169,6 +183,7 @@ int AsmInstance_compile_assembly(AsmInstance *inst)
   pclose(p);
   
   inst->asm_buflen = asm_len; 
+  inst->time_changed = sb.st_mtime; 
   return ASM_INST_OK; 
 }
 

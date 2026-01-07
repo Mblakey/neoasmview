@@ -13,6 +13,8 @@
 #include <fcntl.h>
 #include <unistd.h>
 
+#include <sys/stat.h>
+
 #include "cJSON.h"
 
 #define ASM_INST_OK    0
@@ -31,7 +33,7 @@ typedef struct AsmInstance {
 
   cJSON *compile_node; 
   unsigned long long time_changed; 
-
+  
   char  *asm_buffer; 
   unsigned long long asm_buflen;
   
