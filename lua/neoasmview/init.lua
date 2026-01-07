@@ -1,7 +1,7 @@
 local M = {}
 
-local build = require("vimasm.build")
-M.commands = require("vimasm.commands")
+local build = require("neoasmview.build")
+M.commands = require("neoasmview.commands")
 
 M.root_dir = ""
 
