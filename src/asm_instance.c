@@ -150,8 +150,9 @@ int AsmInstance_compile_assembly(AsmInstance *inst)
 
     unsigned int state = 0; 
     const size_t len = strlen(line_buffer);
-
-    for (unsigned int i=0; i<len && !state; i++) {
+    
+    unsigned int i; 
+    for (i=0; i<len && !state; i++) {
       unsigned char ch = line_buffer[i]; 
       switch (ch) {
         case ' ':
@@ -173,6 +174,9 @@ int AsmInstance_compile_assembly(AsmInstance *inst)
         fprintf(stderr, "Error: asm window buffer not large enough\n");
         return ASM_INST_FAIL; 
       }
+      
+      if (i==1) // label
+        asm_buffer[asm_len++] = '\n'; 
 
       memcpy(asm_buffer+asm_len, line_buffer, len); 
       asm_len += len; 

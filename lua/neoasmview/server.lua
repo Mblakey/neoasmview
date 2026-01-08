@@ -69,6 +69,10 @@ function M.start()
       return
     end
 
+    if not data then 
+      return
+    end
+
     if M.socket_path == nil then
       local path = data:gsub("\r?\n$", "")
       M.socket_path = path
@@ -85,6 +89,10 @@ function M.start()
       M.client:read_start(vim.schedule_wrap(function(err, data)
         if err then
           print("[vimasm] client read error:", err)
+          return
+        end
+
+        if not data then
           return
         end
 
@@ -109,6 +117,10 @@ function M.stop()
     return
   end
   M.handle:kill("sigint")
+  M.handle = nil
+  M.active = false
+  M.socket_path = nil
+  M.client = nil
 end
 
 
@@ -141,7 +153,19 @@ function M.open_vertical()
     end
     
     local filename = M.get_current_buffer_path()
-    local buf = vim.api.nvim_create_buf(false, true)
+    local buf = M.file_to_buf[filename] 
+
+    if buf then 
+      local cur_win = vim.api.nvim_get_current_win()
+      vim.cmd("vsplit")
+      vim.api.nvim_set_current_win(cur_win)
+
+      vim.api.nvim_win_set_buf(0, buf)
+      vim.api.nvim_win_set_width(0, 50)
+      return
+    end 
+
+    buf = vim.api.nvim_create_buf(false, true)
 
     vim.api.nvim_buf_set_option(buf, "buftype", "nofile")   
     vim.api.nvim_buf_set_option(buf, "bufhidden", "wipe")  
@@ -152,11 +176,19 @@ function M.open_vertical()
     M.register_buffer(filename, buf)
 
     local cur_win = vim.api.nvim_get_current_win()
+    local cur_buf = vim.api.nvim_get_current_buf()
     vim.cmd("vsplit")
     vim.api.nvim_set_current_win(cur_win)
 
     vim.api.nvim_win_set_buf(0, buf)
     vim.api.nvim_win_set_width(0, 50)
+
+    vim.api.nvim_create_autocmd("BufWritePost", {
+      buffer = cur_buf, 
+      callback = function()
+        M.send_request(filename)
+      end
+    })
 
     M.send_request(filename)
 end
@@ -205,8 +237,8 @@ function M.send_to_buffer(filename, data)
     return
   end
   
-  local lines = vim.split(data, "\n", { plain = true })
-
+  local lines = vim.split(data, "\n", { plain = true, trimempty = false })
+  
   vim.api.nvim_buf_set_option(bufid, "modifiable", true)
   vim.api.nvim_buf_set_lines(bufid, 0, -1, false, lines)
   vim.api.nvim_buf_set_option(bufid, "modifiable", false)
