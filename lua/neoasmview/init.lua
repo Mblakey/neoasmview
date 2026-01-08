@@ -1,10 +1,10 @@
 local M = {}
 
 local build = require("neoasmview.build")
-M.commands = require("neoasmview.commands")
+M.server = require("neoasmview.server")
 
 function M.setup()
-  M.commands.setup()
+  M.server.setup()
 end
 
 return M
