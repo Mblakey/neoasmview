@@ -341,6 +341,8 @@ int process_client_requests(int client_fd)
     return ASM_INST_FAIL; 
   }
   
+  AsmInstance_write_header(inst, client_fd); 
+
   if (space) {
     if (AsmInstance_write_label(inst, label, client_fd) != ASM_INST_OK) {
       fprintf(stderr, "[asm viewer] error - failed to stream label assembly\n");
@@ -360,6 +362,7 @@ int process_client_requests(int client_fd)
 
 int main(int argc, char *argv[])
 {
+  setlinebuf(stdout);
   process_cml(argc, argv); 
 
   struct sigaction sa = {0};
@@ -419,6 +422,8 @@ int main(int argc, char *argv[])
     unlink(socket_path); 
     return 1; 
   }
+  
+  printf("%s\n", socket_path); 
 
   fprintf(stderr, "[asm viewer] listening...\n"); 
   

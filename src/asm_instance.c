@@ -188,6 +188,38 @@ int AsmInstance_compile_assembly(AsmInstance *inst)
 }
 
 
+int AsmInstance_pipe_header(AsmInstance *inst, FILE *ofp) 
+{
+  const char *file = AsmInstance_get_filename(inst); 
+  if (*file == '\0')
+    return ASM_INST_FAIL; 
+
+  const size_t len = strlen(file); 
+  
+  fwrite(ASM_INST_HEADER, 6, 1, ofp); 
+  fwrite(file, len, 1, ofp); 
+  fputc('\0', ofp); 
+
+  return ASM_INST_OK; 
+}
+
+
+int AsmInstance_write_header(AsmInstance *inst, int fd) 
+{
+  const char *file = AsmInstance_get_filename(inst); 
+  if (*file == '\0')
+    return ASM_INST_FAIL; 
+
+  const size_t len = strlen(file); 
+  
+  write(fd, ASM_INST_HEADER, 6); 
+  write(fd, file, len); 
+  write(fd, "\0", 1); 
+
+  return ASM_INST_OK; 
+}
+
+
 int AsmInstance_pipe_label(AsmInstance *inst, char *label, FILE *ofp) 
 {
   char *asm_buffer = inst->asm_buffer; 

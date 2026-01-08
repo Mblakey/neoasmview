@@ -1,5 +1,3 @@
-
-
 #ifndef ASM_INSTANCE_H
 #define ASM_INSTANCE_H
 
@@ -22,6 +20,8 @@
 
 #define PAGE_SIZE 4096
 #define ASM_WINDOW 4*PAGE_SIZE
+
+#define ASM_INST_HEADER "VIMASM"
 
 typedef struct AsmInstance {
   char infile[PATH_MAX];          
@@ -50,6 +50,9 @@ int    AsmInstance_set_compile_node(AsmInstance*, cJSON*) __nonnull((1,2));
 int    AsmInstance_create_rebuild_cmd(AsmInstance*) __nonnull((1)); 
 
 int    AsmInstance_compile_assembly(AsmInstance*) __nonnull((1));
+
+int    AsmInstance_pipe_header(AsmInstance*, FILE*) __nonnull((1,2)); 
+int    AsmInstance_write_header(AsmInstance*, int) __nonnull((1)); 
 
 int    AsmInstance_pipe_label(AsmInstance*, char*, FILE*) __nonnull((1,2,3)); 
 int    AsmInstance_write_label(AsmInstance*, char*, int) __nonnull((1,2)); 
