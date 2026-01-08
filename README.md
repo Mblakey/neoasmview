@@ -16,7 +16,7 @@ Like a compiler, this project should be able to optimise itself if assembly can 
 [x] - create hash tables and store function assembly for quick access <br>
 [x]  - have assembly regenerated based on last edit change (see Make for logic) <br>
 []  - create tooling for neovim plugin, use Treesitter as dependency for function hooking <br>
-[]  - live event hooking, assembly can change as the user types to show changes as they happen <br>
+[x] - live event hooking, assembly can change as the user types to show changes as they happen <br>
 []  - lua build system to work with Lazy <br>
 []  - full testing and release <br>
 

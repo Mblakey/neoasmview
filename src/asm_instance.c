@@ -139,8 +139,9 @@ int AsmInstance_compile_assembly(AsmInstance *inst)
     return ASM_INST_FAIL; 
   }
 
+  size_t buf_max = ASM_WINDOW;
   if (!inst->asm_buffer) 
-    inst->asm_buffer = (char*)malloc(ASM_WINDOW); 
+    inst->asm_buffer = (char*)malloc(buf_max); 
 
   unsigned long long asm_len = 0; 
   char *asm_buffer = inst->asm_buffer; 
@@ -170,9 +171,9 @@ int AsmInstance_compile_assembly(AsmInstance *inst)
     } 
     
     if (state == 1) {
-      if (asm_len + len > ASM_WINDOW) {
-        fprintf(stderr, "Error: asm window buffer not large enough\n");
-        return ASM_INST_FAIL; 
+      if (asm_len + len > buf_max) {
+        buf_max *= 2;
+        asm_buffer = (char*)realloc(asm_buffer, buf_max); 
       }
       
       if (i==1) // label
@@ -186,8 +187,9 @@ int AsmInstance_compile_assembly(AsmInstance *inst)
   asm_buffer[asm_len] = '\0'; // safety for strchr
   pclose(p);
   
-  inst->asm_buflen = asm_len; 
+  inst->asm_buflen   = asm_len; 
   inst->time_changed = sb.st_mtime; 
+  inst->asm_buffer   = asm_buffer; 
   return ASM_INST_OK; 
 }
 
