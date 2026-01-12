@@ -30,6 +30,9 @@
 #define PAGE_SIZE 4096
 #define ASM_WINDOW 4*PAGE_SIZE
 
+#define SERVER_TYPE_C    0
+#define SERVER_TYPE_RUST 1
+
 const char *cargo_toml_fname = "Cargo.toml"; 
 const char *compile_commands_fname = "compile_commands.json"; 
 
@@ -126,7 +129,7 @@ static bool find_cargo_toml() {
 }
 
 
-static cJSON* parse_compile_commands() 
+static cJSON* parse_project_commands() 
 {
   int fd = open(project_dir, O_RDONLY);
   if (fd == -1) {
@@ -142,13 +145,13 @@ static cJSON* parse_compile_commands()
   }
   
   if ((sb.st_mode & S_IFMT) != S_IFREG) {
-    fprintf(stderr, "Error: compile commands file path is not a regular file\n"); 
+    fprintf(stderr, "Error: project file is not a regular file\n"); 
     return NULL; 
   }
 
   const size_t json_mmap_size = sb.st_size;
   if (json_mmap_size == 0) {
-    fprintf(stderr, "Error: compile_commands.json is empty\n");
+    fprintf(stderr, "Error: project file is empty\n");
     close(fd);
     return NULL;
   }
@@ -266,7 +269,7 @@ static AsmInstance* get_asm_instance(struct hash_entry *hash_table[],
     return NULL; 
   }
 
-  if (AsmInstance_set_compile_node(inst, compile_commands_json) != ASM_INST_OK) {
+  if (AsmInstance_set_compile_node_gcc(inst, compile_commands_json) != ASM_INST_OK) {
     fprintf(stderr, "[asm viewer] error - file %s not found in parsed compile_commands.json\n", inst->infile); 
     free(inst); 
     return NULL; 
@@ -274,7 +277,7 @@ static AsmInstance* get_asm_instance(struct hash_entry *hash_table[],
 
   /* from this filenode, we can extract that commands used to 
    * create the object file */  
-  if (AsmInstance_create_rebuild_cmd(inst) != ASM_INST_OK) {
+  if (AsmInstance_create_gcc_cmd(inst) != ASM_INST_OK) {
     fprintf(stderr, "[asm viewer] error - could not create rebuild cmd\n");
     free(inst);
     return NULL; 
@@ -356,7 +359,7 @@ int process_client_requests(int client_fd)
   }
 
   /* that command gets parsed into our asm viewer */
-  if (AsmInstance_compile_assembly(inst) != ASM_INST_OK)  {
+  if (AsmInstance_compile_assembly_gcc(inst) != ASM_INST_OK)  {
     fprintf(stderr, "[asm viewer] error - failed to compile filtered assembly\n");
     return ASM_INST_FAIL; 
   }
@@ -392,11 +395,15 @@ int main(int argc, char *argv[])
   sigaction(SIGINT, &sa, NULL);
   sigaction(SIGTERM, &sa, NULL);
   signal(SIGPIPE, SIG_IGN);
+
+  char server_type; 
   
   if (find_compile_commands()) {
+    server_type = SERVER_TYPE_C;  
     fprintf(stderr, "[asm viewer] compile_commands.json found\n"); 
   }
   else if (find_cargo_toml()) {
+    server_type = SERVER_TYPE_RUST;  
     fprintf(stderr, "[asm viewer] Cargo.toml found\n"); 
   }
   else {
@@ -404,7 +411,7 @@ int main(int argc, char *argv[])
     return 1;
   }
   
-  compile_commands_json = parse_compile_commands(); 
+  compile_commands_json = parse_project_commands(); 
   if (!compile_commands_json) {
     fprintf(stderr, "Error: failed to parse compile_commands.json\n"); 
     return 1; 

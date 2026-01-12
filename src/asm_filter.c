@@ -177,20 +177,20 @@ int main(int argc, char *argv[])
 
   AsmInstance *inst = AsmInstance_alloc(infile); 
 
-  if (AsmInstance_set_compile_node(inst, compile_commands_json) != ASM_INST_OK) {
+  if (AsmInstance_set_compile_node_gcc(inst, compile_commands_json) != ASM_INST_OK) {
     fprintf(stderr, "Error: file %s not found in parsed compile_commands.json\n", infile); 
     return 1;
   }
 
   /* from this filenode, we can extract that commands used to 
    * create the object file */  
-  if (AsmInstance_create_rebuild_cmd(inst) != ASM_INST_OK) {
+  if (AsmInstance_create_gcc_cmd(inst) != ASM_INST_OK) {
     fprintf(stderr, "Error: could not create rebuild cmd\n");
     return 1; 
   }
 
   /* that command gets parsed into our asm viewer */
-  if (AsmInstance_compile_assembly(inst) != ASM_INST_OK)  {
+  if (AsmInstance_compile_assembly_gcc(inst) != ASM_INST_OK)  {
     fprintf(stderr, "Error: failed to compile filtered assembly\n");
     return 1; 
   }

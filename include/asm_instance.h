@@ -46,10 +46,10 @@ cJSON* AsmInstance_get_compile_node(AsmInstance *inst) __nonnull((1));
 char*  AsmInstance_get_filename(AsmInstance *inst) __nonnull((1)); 
 char*  AsmInstance_get_cmd(AsmInstance *inst) __nonnull((1)); 
 
-int    AsmInstance_set_compile_node(AsmInstance*, cJSON*) __nonnull((1,2)); 
-int    AsmInstance_create_rebuild_cmd(AsmInstance*) __nonnull((1)); 
+int    AsmInstance_set_compile_node_gcc(AsmInstance*, cJSON*) __nonnull((1,2)); 
 
-int    AsmInstance_compile_assembly(AsmInstance*) __nonnull((1));
+int    AsmInstance_create_gcc_cmd(AsmInstance*) __nonnull((1)); 
+int    AsmInstance_compile_assembly_gcc(AsmInstance*) __nonnull((1));
 
 int    AsmInstance_pipe_header(AsmInstance*, FILE*) __nonnull((1,2)); 
 int    AsmInstance_write_header(AsmInstance*, int) __nonnull((1)); 

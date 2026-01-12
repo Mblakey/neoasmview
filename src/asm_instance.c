@@ -40,7 +40,7 @@ char* AsmInstance_get_cmd(AsmInstance *inst)
 }
 
 
-int AsmInstance_set_compile_node(AsmInstance *inst, cJSON *root) 
+int AsmInstance_set_compile_node_gcc(AsmInstance *inst, cJSON *root) 
 {
   /* 
    * compile_commands.json has a specific structure
@@ -64,7 +64,7 @@ int AsmInstance_set_compile_node(AsmInstance *inst, cJSON *root)
 }
 
 
-int AsmInstance_create_rebuild_cmd(AsmInstance *inst) 
+int AsmInstance_create_gcc_cmd(AsmInstance *inst) 
 {
   cJSON *compile_node = AsmInstance_get_compile_node(inst); 
   if (!compile_node)
@@ -108,12 +108,12 @@ int AsmInstance_create_rebuild_cmd(AsmInstance *inst)
     inst->rebuild_command[j++] = str[i]; 
   }
 
-  strcat(inst->rebuild_command, " -S -g1 -fno-inline -fcf-protection=none -fno-unwind-tables -fno-asynchronous-unwind-tables -masm=intel -o -"); 
+  strcat(inst->rebuild_command, " -S -g1 -fno-inline -fcf-protection=none -fno-unwind-tables -fno-asynchronous-unwind-tables -masm=intel -o - 2> /dev/null"); 
   return ASM_INST_OK; 
 }
 
 
-int AsmInstance_compile_assembly(AsmInstance *inst) 
+int AsmInstance_compile_assembly_gcc(AsmInstance *inst) 
 {
   char *cmd = AsmInstance_get_cmd(inst); 
   if (!cmd)
