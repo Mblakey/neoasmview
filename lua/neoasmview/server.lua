@@ -147,7 +147,7 @@ end
 function M.open_vertical()
     if not M.handle then 
       M.start()
-      local ok = vim.wait(5000, function()
+      local ok = vim.wait(1000, function()
         return M.active ~= false
       end, 50)
     end
