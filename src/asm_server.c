@@ -30,7 +30,9 @@
 #define PAGE_SIZE 4096
 #define ASM_WINDOW 4*PAGE_SIZE
 
+const char *cargo_toml_fname = "Cargo.toml"; 
 const char *compile_commands_fname = "compile_commands.json"; 
+
 char project_dir[PATH_MAX] = {0}; // reuse for compile_commands.json path
 char socket_path[PATH_MAX] = {0}; 
 
@@ -99,6 +101,24 @@ static bool find_compile_commands() {
   strcat(project_dir, "../"); 
   if (search_file(project_dir, compile_commands_fname)) {
     strcat(project_dir, compile_commands_fname); 
+    return true; 
+  }
+
+  return false; 
+}
+
+
+static bool find_cargo_toml() {
+
+  strcat(project_dir, "/"); 
+  if (search_file(project_dir, cargo_toml_fname)) {
+    strcat(project_dir, cargo_toml_fname); 
+    return true; 
+  }
+
+  strcat(project_dir, "../"); 
+  if (search_file(project_dir, cargo_toml_fname)) {
+    strcat(project_dir, cargo_toml_fname); 
     return true; 
   }
 
@@ -373,8 +393,14 @@ int main(int argc, char *argv[])
   sigaction(SIGTERM, &sa, NULL);
   signal(SIGPIPE, SIG_IGN);
   
-  if (!find_compile_commands()) {
-    fprintf(stderr, "Error: could not find compile_commands.json\n"); 
+  if (find_compile_commands()) {
+    fprintf(stderr, "[asm viewer] compile_commands.json found\n"); 
+  }
+  else if (find_cargo_toml()) {
+    fprintf(stderr, "[asm viewer] Cargo.toml found\n"); 
+  }
+  else {
+    fprintf(stderr, "Error: could not find project commands\n"); 
     return 1;
   }
   
@@ -389,7 +415,6 @@ int main(int argc, char *argv[])
 
   snprintf(socket_path, sizeof(socket_path), "%s/vimasm_%u.sock", tmp_dir, pid); 
   
-  fprintf(stderr, "[asm viewer] compile_commands.json found\n"); 
   fprintf(stderr, "[asm viewer] tmp directory for socket %s\n", tmp_dir); 
   fprintf(stderr, "[asm viewer] creating socket vimasm_%u.sock\n", pid); 
 
