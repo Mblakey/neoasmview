@@ -152,6 +152,22 @@ int AsmInstance_compile_assembly(AsmInstance *inst)
     unsigned int state = 0; 
     const size_t len = strlen(line_buffer);
     
+    /*
+     * keep jmp labels and their assembly
+     * e.g .L183: <asm> 
+     */
+    if (len > 2 && 
+        line_buffer[0] == '.' && 
+        line_buffer[1] == 'L') 
+    {
+      if (line_buffer[2] >= '0' &&
+          line_buffer[2] <= '9')
+      {
+        asm_buffer[asm_len++] = '\n'; 
+        state = 1; 
+      }
+    }
+    
     unsigned int i; 
     for (i=0; i<len && !state; i++) {
       unsigned char ch = line_buffer[i]; 
