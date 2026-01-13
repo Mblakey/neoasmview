@@ -120,7 +120,6 @@ int AsmInstance_compile_assembly_gcc(AsmInstance *inst)
     return ASM_INST_FAIL; 
 
   /* first check if there has been a modification */
-  
   const char *file = AsmInstance_get_filename(inst); 
   if (*file == '\0')
     return ASM_INST_FAIL; 
