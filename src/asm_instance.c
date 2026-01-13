@@ -64,7 +64,7 @@ int AsmInstance_set_compile_node_gcc(AsmInstance *inst, cJSON *root)
 }
 
 
-int AsmInstance_create_gcc_cmd(AsmInstance *inst) 
+int AsmInstance_command_C(AsmInstance *inst) 
 {
   cJSON *compile_node = AsmInstance_get_compile_node(inst); 
   if (!compile_node)
@@ -113,7 +113,7 @@ int AsmInstance_create_gcc_cmd(AsmInstance *inst)
 }
 
 
-int AsmInstance_compile_assembly_gcc(AsmInstance *inst) 
+int AsmInstance_compile_C(AsmInstance *inst) 
 {
   char *cmd = AsmInstance_get_cmd(inst); 
   if (!cmd)

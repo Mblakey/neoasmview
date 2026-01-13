@@ -277,7 +277,7 @@ static AsmInstance* get_asm_instance(struct hash_entry *hash_table[],
 
   /* from this filenode, we can extract that commands used to 
    * create the object file */  
-  if (AsmInstance_create_gcc_cmd(inst) != ASM_INST_OK) {
+  if (AsmInstance_command_C(inst) != ASM_INST_OK) {
     fprintf(stderr, "[asm viewer] error - could not create rebuild cmd\n");
     free(inst);
     return NULL; 
@@ -359,7 +359,7 @@ int process_client_requests(int client_fd)
   }
 
   /* that command gets parsed into our asm viewer */
-  if (AsmInstance_compile_assembly_gcc(inst) != ASM_INST_OK)  {
+  if (AsmInstance_compile_C(inst) != ASM_INST_OK)  {
     fprintf(stderr, "[asm viewer] error - failed to compile filtered assembly\n");
     return ASM_INST_FAIL; 
   }
