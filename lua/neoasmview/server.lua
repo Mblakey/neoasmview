@@ -4,9 +4,8 @@ local uv = vim.loop
 
 M.root_dir = ""
 M.socket_path = nil
-
-ServerCode = { UNSET = 0, FAIL = 1, READY_FOR_BIND = 2, GOOD = 3}
-M.server_status = ServerCode.UNSET
+M.startup_done  = false
+M.startup_error = false
 
 M.file_to_buf = {}
 M.buf_to_file = {}
@@ -37,11 +36,13 @@ function M.start()
                         stdio = {nil, M.stdout, M.stderr},
                       }, 
                       function (code, signal)
-                        M.server_status = ServerCode.UNSET
                         if M.stdout then M.stdout:close() M.stdout=nil end
                         if M.stderr then M.stderr:close() M.stderr=nil end
                         if M.client then M.client:close() M.client=nil end
                         if M.handle then M.handle:close() M.handle=nil end
+
+                        M.startup_done  = false
+                        M.startup_error = false
                         print("[vimasm] asm-server exited", code, signal)
                       end
                       )
@@ -55,53 +56,63 @@ function M.start()
   end))
 
   M.stdout:read_start(vim.schedule_wrap(function(_, data)
-    if not data or M.server_status ~= ServerCode.UNSET then 
-      return 
+    if not data or startup_done then
+      return
     end
-    
+
     local path = data:gsub("\r?\n$", "")
-    M.socket_path = path
-    M.server_status = ServerCode.READY_FOR_BIND
+
+    if path == "VIMASM_NULL" then
+      M.startup_error = true
+    else
+      M.socket_path = path
+    end
+
+    M.startup_done = true
   end))
 
   -- wait synchronously 
   vim.wait(5000, function()
-    return M.server_status ~= ServerCode.UNSET
+    return M.startup_done 
   end, 50)
 
-  if M.server_status ~= ServerCode.READY_FOR_BIND then
+  if M.startup_error == true then
     return false
   end
 
-  print("[vimasm] Server spawned successfully, socket path:", M.socket_path)
+  local connected = false
 
   M.client:connect(M.socket_path, function(err)
     if err then
-      M.server_status = ServerCode.UNSET
       print("[vimasm] Failed to connect:", err)
       return
     end
-    M.server_status = ServerCode.GOOD
+
+    connected = true
+
+    -- set up our socket handler
+    M.client:read_start(vim.schedule_wrap(function(_, data)
+      if not data then 
+        return
+      end
+      
+      local payload = data:sub(7)  -- everything after "VIMASM"
+      local pos = string.find(payload, "\0")
+
+      if pos then
+        filepath = string.sub(payload, 1, pos - 1)
+        rest = string.sub(payload, pos + 1)
+      end
+      
+      M.send_to_buffer(filepath, rest)
+    end))
   end)
 
-  -- set up our socket handler
-  M.client:read_start(vim.schedule_wrap(function(_, data)
-    if not data or M.server_status ~= ServerCode.GOOD then
-      return
-    end
-    
-    local payload = data:sub(7)  -- everything after "VIMASM"
-    local pos = string.find(payload, "\0")
+  local ok = vim.wait(5000, function()
+    return connected
+  end)
 
-    if pos then
-      filepath = string.sub(payload, 1, pos - 1)
-      rest = string.sub(payload, pos + 1)
-    end
-    
-    M.send_to_buffer(filepath, rest)
-  end))
-
-  return M.server_status == ServerCode.GOOD
+  return ok
 end
 
 
@@ -110,10 +121,12 @@ function M.stop()
     return
   end
   M.handle:kill("sigint")
-  M.handle = nil
+  M.handle      = nil
   M.socket_path = nil
-  M.client = nil
-  M.server_status = ServerCode.UNSET
+  M.client      = nil
+
+  M.startup_done  = false
+  M.startup_error = false
 end
 
 
@@ -138,18 +151,9 @@ end
 
 
 function M.open_vertical()
-    if M.server_status ~= ServerCode.GOOD then 
-      M.start()
-
-      -- wait synchronously 
-      vim.wait(5000, function()
-        return M.server_status == ServerCode.GOOD
-      end, 50)
-
-      if M.server_status ~= ServerCode.GOOD then 
-        print("[vimasm] time out on final wait for open call")
-        return 
-      end
+    if M.startup_done == false then
+      local ok = M.start()
+      if not ok then return end
     end
     
     local filename = M.get_current_buffer_path()
@@ -195,7 +199,7 @@ end
 
 
 function M.send_request(filename)
-  if M.server_status ~= ServerCode.GOOD then
+  if not M.startup_done then
     print("[vimasm] server socket not available")
     return
   end

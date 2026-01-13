@@ -408,6 +408,7 @@ int main(int argc, char *argv[])
   }
   else {
     fprintf(stderr, "Error: could not find project commands\n"); 
+    printf("VIMASM_NULL\n");
     return 1;
   }
   
