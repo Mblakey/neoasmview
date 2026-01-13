@@ -5,7 +5,7 @@ local uv = vim.loop
 M.root_dir = ""
 M.socket_path = nil
 
-ServerCode = { UNSET = 0, EXIT = 1, READY_FOR_BIND = 2, GOOD = 3}
+ServerCode = { UNSET = 0, FAIL = 1, READY_FOR_BIND = 2, GOOD = 3}
 M.server_status = ServerCode.UNSET
 
 M.file_to_buf = {}
@@ -46,13 +46,13 @@ function M.start()
                       end
                       )
 
-  M.stderr:read_start(function(_, data)
+  M.stderr:read_start(vim.schedule_wrap(function(_, data)
     if data then
       vim.schedule(function()
         print("[asm-socket]", data)
       end)
     end
-  end)
+  end))
 
   M.stdout:read_start(vim.schedule_wrap(function(_, data)
     if not data or M.server_status ~= ServerCode.UNSET then 
@@ -70,7 +70,6 @@ function M.start()
   end, 50)
 
   if M.server_status ~= ServerCode.READY_FOR_BIND then
-    print("[vimasm] server failed or exited early")
     return false
   end
 
@@ -88,7 +87,6 @@ function M.start()
   -- set up our socket handler
   M.client:read_start(vim.schedule_wrap(function(_, data)
     if not data or M.server_status ~= ServerCode.GOOD then
-      print("[vimasm] error reading request")
       return
     end
     
