@@ -36,13 +36,7 @@ function M.start()
                         stdio = {nil, M.stdout, M.stderr},
                       }, 
                       function (code, signal)
-                        if M.stdout then M.stdout:close() M.stdout=nil end
-                        if M.stderr then M.stderr:close() M.stderr=nil end
-                        if M.client then M.client:close() M.client=nil end
-                        if M.handle then M.handle:close() M.handle=nil end
-
-                        M.startup_done  = false
-                        M.startup_error = false
+                        M.stop()
                         print("[vimasm] asm-server exited", code, signal)
                       end
                       )
@@ -56,7 +50,7 @@ function M.start()
   end))
 
   M.stdout:read_start(vim.schedule_wrap(function(_, data)
-    if not data or startup_done then
+    if not data or M.startup_done then
       return
     end
 
@@ -76,8 +70,9 @@ function M.start()
     return M.startup_done 
   end, 50)
 
-  if M.startup_error == true then
-    return false
+  if M.startup_error then
+    M.stop()
+    return;
   end
 
   local connected = false
@@ -85,6 +80,7 @@ function M.start()
   M.client:connect(M.socket_path, function(err)
     if err then
       print("[vimasm] Failed to connect:", err)
+      M.stop()
       return
     end
 
@@ -117,14 +113,17 @@ end
 
 
 function M.stop()
-  if not M.handle then
-    return
+  if M.stdout then M.stdout:close() M.stdout=nil end
+  if M.stderr then M.stderr:close() M.stderr=nil end
+  if M.client then M.client:close() M.client=nil end
+  
+  if M.handle then 
+    M.handle:kill("sigint")
+    M.handle:close() 
+    M.handle=nil 
   end
-  M.handle:kill("sigint")
-  M.handle      = nil
-  M.socket_path = nil
-  M.client      = nil
 
+  M.socket_path = nil
   M.startup_done  = false
   M.startup_error = false
 end
