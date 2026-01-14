@@ -270,7 +270,7 @@ int AsmInstance_compile_C(AsmInstance *inst)
 }
 
 
-int AsmInstance_function_message_C(AsmInstance *inst, int fd)
+int AsmInstance_function_message_C(AsmInstance *inst, int client_fd)
 {
   size_t bytes; 
   char buffer[ASM_WINDOW]; 
@@ -283,13 +283,16 @@ int AsmInstance_function_message_C(AsmInstance *inst, int fd)
   const char *type = ".type";
   const char *label = "function";
 
+  size_t buf_len = 0; 
+  size_t buf_max = 16384;
+  char *msg_buffer = (char*)malloc(buf_max); 
+
   char *cmd = AsmInstance_get_cmd(inst); 
   if (!cmd)
     return ASM_INST_FAIL; 
 
-  /* first check if there has been a modification */
-  const char *file = AsmInstance_get_filename(inst); 
-  if (*file == '\0')
+  char *filename = AsmInstance_get_filename(inst); 
+  if (!*filename) 
     return ASM_INST_FAIL; 
 
   FILE *fp = popen(cmd,"r");
@@ -315,8 +318,7 @@ jmp_type_state:
       }
     } 
   }
-  fclose(fp); 
-  return ASM_INST_OK; 
+  goto jmp_write_message;
 
   while((bytes = fread(buffer, 1, sizeof(buffer), fp))) {
     i = 0; 
@@ -331,8 +333,7 @@ jmp_read_state:
       function_name[func_len++] = ch;
     }
   }
-  fclose(fp); 
-  return ASM_INST_OK; 
+  goto jmp_write_message;
 
   while((bytes = fread(buffer, 1, sizeof(buffer), fp))) {
     i = 0; 
@@ -357,11 +358,52 @@ jmp_label_state:
         char *p = function_name; 
         while (p && (*p == ' ' || *p == '\t'))
           p++; 
-        dprintf(fd, "%s\n", p); 
+        size_t flen = strlen(p);
+
+        if (buf_len + flen+1 > buf_max) {
+          buf_max *= 2; 
+          char *new_buffer = realloc(msg_buffer, buf_max);
+          if (!new_buffer) {
+            fprintf(stderr, "Error: [libc] realloc\n");
+            fclose(fp); 
+            free(msg_buffer);
+            return ASM_INST_FAIL;
+          }
+          msg_buffer = new_buffer; 
+        }
+        memcpy(msg_buffer+buf_len, p, flen);
+        buf_len += flen; 
+        msg_buffer[buf_len++] = '\n';
+        state = 0;  
         goto jmp_type_state;
       }
     } 
+    goto jmp_write_message;
   }
+
+jmp_write_message:
+
+  const size_t brackets_cnt = 2;
+  const size_t colon_cnt    = 2;
+  const size_t comma_cnt    = 2;
+  const size_t quotes_cnt   = 4;
+  const size_t field_len    = 8 + 3; // filepath and asm 
+  const size_t filename_len = strlen(filename); 
+
+  const uint32_t msg_bytes = brackets_cnt + 
+                             colon_cnt +
+                             comma_cnt + 
+                             quotes_cnt +
+                             field_len +
+                             filename_len +
+                             buf_len;
+
+  /* prefix the number of bytes for iterative decoding on the other side 
+   * its a shame i cant let lua just look at this memory.. classic IPC */
+  write(client_fd, &msg_bytes, sizeof(uint32_t)); 
+  dprintf(client_fd,"{\"filepath\":\"%s\",\"asm\":\"%s\"}", filename, msg_buffer);   
+  
+  free(msg_buffer); 
   fclose(fp); 
   return ASM_INST_OK; 
 }

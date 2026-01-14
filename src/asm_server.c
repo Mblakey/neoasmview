@@ -319,17 +319,17 @@ int process_client_requests(int client_fd)
   }
 
   cJSON *js_filepath = cJSON_GetObjectItemCaseSensitive(js_request, "filepath");
-  cJSON *js_filetype = cJSON_GetObjectItemCaseSensitive(js_request, "filetype");
+  cJSON *js_command  = cJSON_GetObjectItemCaseSensitive(js_request, "command");
 
-  if (!js_filepath || !js_filetype) {
+  if (!js_filepath || !js_command) {
     fprintf(stderr, "Error: [cJSON] cJSON_GetObjectItemCaseSensitive - %s\n", cJSON_GetErrorPtr());
     cJSON_free(js_request); 
     return ASM_INST_FAIL; 
   }
 
   char *file_name = cJSON_GetStringValue(js_filepath); 
-  char *file_type = cJSON_GetStringValue(js_filetype); 
-  if (!file_name || !file_type) {
+  char *command   = cJSON_GetStringValue(js_command); 
+  if (!file_name || !command) {
     fprintf(stderr, "Error: [cJSON] cJSON_GetStringValue - %s\n", cJSON_GetErrorPtr());
     cJSON_free(js_request); 
     return ASM_INST_FAIL; 
@@ -342,8 +342,14 @@ int process_client_requests(int client_fd)
     fprintf(stderr, "[asm viewer] error - failed to create asm instance\n");  
     return ASM_INST_FAIL; 
   }
-
-  return AsmInstance_asm_message_C(inst, client_fd); 
+  
+  if (strcmp(command, "assembly")==0)
+    return AsmInstance_asm_message_C(inst, client_fd); 
+  else if (strcmp(command, "functions")==0) {
+    return AsmInstance_function_message_C(inst, client_fd); 
+  }
+  else 
+    return ASM_INST_FAIL; 
 }
 
 

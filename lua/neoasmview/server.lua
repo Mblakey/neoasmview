@@ -181,7 +181,7 @@ function M.register_buffer(filename, bufnr)
 end
 
 
-function M.open_vertical()
+function M.open_assembly_vertical()
     if M.startup_done == false then
       local ok = M.start()
       if not ok then return end
@@ -223,15 +223,57 @@ function M.open_vertical()
       buffer = cur_buf, 
       group = M.augroup,
       callback = function()
-        M.send_request(filename, ft)
+        M.send_assembly_request(filename)
       end
     })
     
-    M.send_request(filename, ft)
+    M.send_assembly_request(filename)
 end
 
 
-function M.send_request(filename, filetype)
+function M.open_functions_vertical()
+    if M.startup_done == false then
+      local ok = M.start()
+      if not ok then return end
+    end
+    
+    local filename = M.get_current_buffer_path()
+    local ft = vim.api.nvim_buf_get_option(0, "filetype")
+    local buf = M.file_to_buf[filename] 
+
+    if buf then 
+      local cur_win = vim.api.nvim_get_current_win()
+      vim.cmd("vsplit")
+      vim.api.nvim_set_current_win(cur_win)
+
+      vim.api.nvim_win_set_buf(0, buf)
+      vim.api.nvim_win_set_width(0, 50)
+      return
+    end 
+
+    buf = vim.api.nvim_create_buf(false, true)
+
+    vim.api.nvim_buf_set_option(buf, "buftype", "nofile")   
+    vim.api.nvim_buf_set_option(buf, "bufhidden", "wipe")  
+    vim.api.nvim_buf_set_option(buf, "swapfile", false)   
+    vim.api.nvim_buf_set_option(buf, "modifiable", false) 
+    vim.api.nvim_buf_set_option(buf, "filetype", "asm")  
+
+    M.register_buffer(filename, buf)
+
+    local cur_win = vim.api.nvim_get_current_win()
+    local cur_buf = vim.api.nvim_get_current_buf()
+    vim.cmd("vsplit")
+    vim.api.nvim_set_current_win(cur_win)
+
+    vim.api.nvim_win_set_buf(0, buf)
+    vim.api.nvim_win_set_width(0, 50)
+
+    M.send_function_request(filename)
+end
+
+
+function M.send_assembly_request(filename)
   if not M.startup_done then
     print("[vimasm] server socket not available")
     return
@@ -239,7 +281,28 @@ function M.send_request(filename, filetype)
   
   local request = {
     filepath = filename,
-    filetype = filetype,
+    command = "assembly",
+  }
+  
+  local json = vim.json.encode(request) .. "\n"
+  
+  uv.write(M.client, json, function(err)
+    if err then
+      print("[vimasm] failed to write to server socket:", err)
+    end
+  end)
+end
+
+
+function M.send_function_request(filename)
+  if not M.startup_done then
+    print("[vimasm] server socket not available")
+    return
+  end
+  
+  local request = {
+    filepath = filename,
+    command = "functions",
   }
   
   local json = vim.json.encode(request) .. "\n"
@@ -297,20 +360,22 @@ function M.setup()
   })
 
   vim.api.nvim_create_user_command(
-    "VimasmVSplit", M.open_vertical, {}
+    "VimasmVSplitAsm", M.open_assembly_vertical, {}
+  )
+
+  vim.api.nvim_create_user_command(
+    "VimasmVSplitFunctions", M.open_functions_vertical, {}
   )
   
   vim.api.nvim_create_user_command(
     "VimasmASM",                 
     function()                  
       local filename = M.get_buf_filename()  
-      local filetype = vim.api.nvim_buf_get_option(0, "filetype")
-
       if not filename then
         vim.notify("[vimasm] No file associated with current buffer", vim.log.levels.WARN)
         return
       end
-      M.send_request(filename, filetype)
+      M.send_assembly_request(filename)
     end, {}
   )
 end
