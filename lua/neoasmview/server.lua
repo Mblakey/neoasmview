@@ -16,6 +16,15 @@ M.stdout = nil
 M.stderr = nil
 M.client = nil
 
+
+local bit = require("bit")  -- LuaJIT / Neovim
+
+local function read_uint32_le(s)
+  local b1,b2,b3,b4 = s:byte(1,4)
+  return b1 + bit.lshift(b2,8) + bit.lshift(b3,16) + bit.lshift(b4,24)
+end
+
+
 function M.set_root(path)
   if path == nil or path == "" then
     vim.notify("[vimasm] Invalid path", vim.log.levels.WARN)
@@ -86,24 +95,37 @@ function M.start()
     end
 
     connected = true
-
-    -- set up our socket handler
+    -- set up our socket handler, not guaranteed to read the 
+    -- whole message in one go, prefix with expected length,
+    -- store in buffer
+    
+    local buffer = ""
+    local msg_size = nil
     M.client:read_start(vim.schedule_wrap(function(_, data)
       if not data then 
         return
       end
       
-      local ok, json_obj = pcall(vim.json.decode, data)
+      buffer = buffer .. data 
 
-      if not ok then
-        print("[vimasm] invalid JSON request")
-        return
+      if not msg_size and #buffer >= 4 then 
+        msg_size =  read_uint32_le(buffer:sub(1,4))
+        buffer = buffer:sub(5) -- should be pure json after this
       end
 
-      local filepath = json_obj.filepath
-      local asm = json_obj.asm
+      if msg_size and #buffer >= msg_size then
+        local ok, json_obj = pcall(vim.json.decode, buffer)
+        buffer = "" -- reset the buffer
+        if not ok then
+          print("[vimasm] invalid JSON request")
+          return
+        end
 
-      M.send_to_buffer(filepath, asm)
+        local filepath = json_obj.filepath
+        local asm = json_obj.asm
+
+        M.send_to_buffer(filepath, asm)
+      end
     end))
   end)
 

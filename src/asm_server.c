@@ -33,15 +33,13 @@
 #define SERVER_TYPE_C    0
 #define SERVER_TYPE_RUST 1
 
-const char *cargo_toml_fname = "Cargo.toml"; 
-const char *compile_commands_fname = "compile_commands.json"; 
-
 char project_dir[PATH_MAX] = {0}; // reuse for compile_commands.json path
 char socket_path[PATH_MAX] = {0}; 
 
 cJSON *compile_commands_json; 
 
 static volatile sig_atomic_t exit_flag = 0; 
+
 
 static void exit_from_signal(int signum)
 {
@@ -93,35 +91,40 @@ static bool search_file(const char *dirpath, const char *filename)
 }
 
 
-static bool find_compile_commands() {
+static bool check_tool(const char *cmd) {
+  char *path = getenv("PATH");
+  if (!path) 
+    return false;
 
-  strcat(project_dir, "/"); 
-  if (search_file(project_dir, compile_commands_fname)) {
-    strcat(project_dir, compile_commands_fname); 
-    return true; 
+  char buf[PATH_MAX];
+  char *paths = strdup(path);
+  char *saveptr = NULL;
+  
+  char *p = strtok_r(paths, ":", &saveptr);
+  for (; p; p = strtok_r(NULL, ":", &saveptr)) {
+    snprintf(buf, sizeof(buf), "%s/%s", p, cmd);
+    if (access(buf, X_OK) == 0) {
+      free(paths);
+      return true; 
+    }
   }
 
-  strcat(project_dir, "../"); 
-  if (search_file(project_dir, compile_commands_fname)) {
-    strcat(project_dir, compile_commands_fname); 
-    return true; 
-  }
-
-  return false; 
+  free(paths);
+  return false;
 }
 
 
-static bool find_cargo_toml() {
-
+static bool find_project_file(const char *project_file) 
+{
   strcat(project_dir, "/"); 
-  if (search_file(project_dir, cargo_toml_fname)) {
-    strcat(project_dir, cargo_toml_fname); 
+  if (search_file(project_dir, project_file)) {
+    strcat(project_dir, project_file); 
     return true; 
   }
 
   strcat(project_dir, "../"); 
-  if (search_file(project_dir, cargo_toml_fname)) {
-    strcat(project_dir, cargo_toml_fname); 
+  if (search_file(project_dir, project_file)) {
+    strcat(project_dir, project_file); 
     return true; 
   }
 
@@ -275,6 +278,12 @@ static AsmInstance* get_asm_instance(struct hash_entry *hash_table[],
     return NULL; 
   }
 
+  /* append a filter here, e.g if C++ */
+
+  if (!check_tool("c++filt")) {
+    fprintf(stderr, "no tool called c++filt in a global path\n"); 
+  }
+
   slot = hash_table[hash_idx]; 
   if (!slot)
     slot = hash_table[hash_idx] = hash_entry_alloc(); 
@@ -332,30 +341,32 @@ int process_client_requests(int client_fd)
   buffer[bytes] = '\0'; 
 
   // the buffer now comes in as a JSON, one level for easy parsing.
-  cJSON *request = cJSON_Parse(buffer);
-  if (request == NULL) {
+  cJSON *js_request = cJSON_Parse(buffer);
+  if (js_request == NULL) {
     fprintf(stderr, "Error: [cJSON] cJSON_Parse - %s\n", cJSON_GetErrorPtr());
     return ASM_INST_FAIL; 
   }
 
-  cJSON *filepath = cJSON_GetObjectItemCaseSensitive(request, "filepath");
-  if (!filepath) {
+  cJSON *js_filepath = cJSON_GetObjectItemCaseSensitive(js_request, "filepath");
+  cJSON *js_filetype = cJSON_GetObjectItemCaseSensitive(js_request, "filetype");
+
+  if (!js_filepath || !js_filetype) {
     fprintf(stderr, "Error: [cJSON] cJSON_GetObjectItemCaseSensitive - %s\n", cJSON_GetErrorPtr());
-    cJSON_free(request); 
+    cJSON_free(js_request); 
     return ASM_INST_FAIL; 
   }
 
-  char *file_name = cJSON_GetStringValue(filepath); 
-  if (!file_name) {
+  char *file_name = cJSON_GetStringValue(js_filepath); 
+  char *file_type = cJSON_GetStringValue(js_filetype); 
+  if (!file_name || !file_type) {
     fprintf(stderr, "Error: [cJSON] cJSON_GetStringValue - %s\n", cJSON_GetErrorPtr());
-    cJSON_free(request); 
+    cJSON_free(js_request); 
     return ASM_INST_FAIL; 
   }
-  
-  cJSON_free(request); 
+
+  cJSON_free(js_request); 
 
   AsmInstance *inst = get_asm_instance(hash_table, HT_SIZE, file_name);  
-
   if (!inst) {
     fprintf(stderr, "[asm viewer] error - failed to create asm instance\n");  
     return ASM_INST_FAIL; 
@@ -367,11 +378,29 @@ int process_client_requests(int client_fd)
     return ASM_INST_FAIL; 
   }
  
-  /* small json responce, vim internals make this an easy parse */
+  /* "small" json responce, vim internals make this an easy parse */
   char *assembly = AsmInstance_get_asm(inst); 
   char *filename = AsmInstance_get_filename(inst); 
-  dprintf(client_fd,"{\"filepath\": \"%s\", \"asm\": \"%s\"}\n", filename, assembly);  
+  
+  const size_t brackets_cnt = 2;
+  const size_t colon_cnt    = 2;
+  const size_t comma_cnt    = 2;
+  const size_t quotes_cnt   = 4;
+  const size_t field_len = 8 + 3; // filepath and asm 
+  const size_t filename_len = strlen(filename); 
 
+  const uint32_t msg_bytes = brackets_cnt + 
+                             colon_cnt +
+                             comma_cnt + 
+                             quotes_cnt +
+                             field_len +
+                             filename_len +
+                             inst->asm_buflen;
+  
+  /* prefix the number of bytes for iterative decoding on the other side 
+   * its a shame i cant let lua just look at this memory.. classic IPC */
+  write(client_fd, &msg_bytes, sizeof(uint32_t)); 
+  dprintf(client_fd,"{\"filepath\":\"%s\",\"asm\":\"%s\"}", filename, assembly);   
   return ASM_INST_OK; 
 }
 
@@ -391,11 +420,11 @@ int main(int argc, char *argv[])
 
   char server_type; 
   
-  if (find_compile_commands()) {
+  if (find_project_file("compile_commands.json")) {
     server_type = SERVER_TYPE_C;  
     fprintf(stderr, "[asm viewer] compile_commands.json found\n"); 
   }
-  else if (find_cargo_toml()) {
+  else if (find_project_file("Cargo.toml")) {
     server_type = SERVER_TYPE_RUST;  
     fprintf(stderr, "[asm viewer] Cargo.toml found\n"); 
   }

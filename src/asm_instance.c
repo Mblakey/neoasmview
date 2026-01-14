@@ -3,29 +3,6 @@
 #include "asm_instance.h"
 
 
-static bool test_cmd(const char *cmd) {
-  char *path = getenv("PATH");
-  if (!path) 
-    return false;
-
-  char buf[PATH_MAX];
-  char *paths = strdup(path);
-  char *saveptr = NULL;
-  
-  char *p = strtok_r(paths, ":", &saveptr);
-  for (; p; p = strtok_r(NULL, ":", &saveptr)) {
-    snprintf(buf, sizeof(buf), "%s/%s", p, cmd);
-    if (access(buf, X_OK) == 0) {
-      free(paths);
-      return true; 
-    }
-  }
-
-  free(paths);
-  return false;
-}
-
-
 AsmInstance* AsmInstance_alloc(char *fname) 
 {
   AsmInstance *inst = (AsmInstance*)malloc(sizeof(AsmInstance)); 
@@ -70,6 +47,17 @@ char* AsmInstance_get_asm(AsmInstance *inst)
   if (!asm_buffer || !inst->asm_buflen)
     return NULL; 
   return asm_buffer; 
+}
+
+
+const char* AsmInstance_get_filetype(AsmInstance *inst) 
+{
+  switch (inst->ft) {
+    case FILE_TYPE_C: return "C";
+    case FILE_TYPE_CPP: return "CPP";
+    case FILE_TYPE_RUST: return "RS";
+  }
+  return NULL; 
 }
 
 
@@ -217,7 +205,13 @@ int AsmInstance_compile_C(AsmInstance *inst)
     if (state == 1) {
       if (asm_len + len > buf_max) {
         buf_max *= 2;
-        asm_buffer = (char*)realloc(asm_buffer, buf_max); 
+        char *new_buffer = (char*)realloc(asm_buffer, buf_max); 
+        if (!new_buffer) {
+          fprintf(stderr, "Error: [libc] realloc\n");
+          free(asm_buffer);
+          return ASM_INST_FAIL;
+        }
+        asm_buffer = new_buffer; 
       }
       
       if (i==1) // label
