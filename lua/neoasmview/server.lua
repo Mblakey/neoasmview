@@ -6,6 +6,7 @@ M.root_dir = ""
 M.socket_path = nil
 M.startup_done  = false
 M.startup_error = false
+M.augroup = nil
 
 M.file_to_buf = {}
 M.buf_to_file = {}
@@ -109,12 +110,18 @@ function M.start()
   local ok = vim.wait(5000, function()
     return connected
   end)
-
+  
+  M.augroup = vim.api.nvim_create_augroup("VIMASM", {clear = true})
   return ok
 end
 
 
 function M.stop()
+  if M.augroup then
+    vim.api.nvim_clear_autocmds({ group = M.augroup })
+    M.augroup = nil
+  end
+
   if M.stdout then M.stdout:close() M.stdout=nil end
   if M.stderr then M.stderr:close() M.stderr=nil end
   if M.client then M.client:close() M.client=nil end
@@ -137,7 +144,8 @@ function M.register_buffer(filename, bufnr)
   M.buf_to_file[bufnr] = path
 
   vim.api.nvim_create_autocmd({"BufWipeout", "BufDelete"}, {
-    buffer = bufnr,
+    buffer = bufnr, 
+    group = M.augroup,
     callback = function()
       M.file_to_buf[path] = nil
       M.buf_to_file[bufnr] = nil
@@ -191,6 +199,7 @@ function M.open_vertical()
 
     vim.api.nvim_create_autocmd("BufWritePost", {
       buffer = cur_buf, 
+      group = M.augroup,
       callback = function()
         M.send_request(filename, ft)
       end
@@ -259,6 +268,7 @@ function M.setup()
   M.root_dir = vim.fn.getcwd()
 
   vim.api.nvim_create_autocmd("VimLeavePre", {
+    group = M.augroup,
     callback = function()
       M.stop()
     end
