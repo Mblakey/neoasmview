@@ -269,17 +269,9 @@ static AsmInstance* get_asm_instance(struct hash_entry *hash_table[],
     return NULL; 
   }
 
-  if (AsmInstance_set_compile_node_gcc(inst, compile_commands_json) != ASM_INST_OK) {
+  if (AsmInstance_parse_command_C(inst, compile_commands_json) != ASM_INST_OK) {
     fprintf(stderr, "[asm viewer] error - file %s not found in parsed compile_commands.json\n", inst->infile); 
     free(inst); 
-    return NULL; 
-  }
-
-  /* from this filenode, we can extract that commands used to 
-   * create the object file */  
-  if (AsmInstance_command_C(inst) != ASM_INST_OK) {
-    fprintf(stderr, "[asm viewer] error - could not create rebuild cmd\n");
-    free(inst);
     return NULL; 
   }
 
@@ -318,8 +310,9 @@ int process_client_requests(int client_fd)
 {
   struct hash_entry *hash_table[HT_SIZE] = {NULL}; 
 
-  char buffer[PATH_MAX+1]; 
-  size_t bytes = read(client_fd, buffer, PATH_MAX); 
+  const size_t bufmax = 16384;
+  char buffer[bufmax]; 
+  size_t bytes = read(client_fd, buffer, bufmax); 
   
   if (bytes == -1) {
     // no data ready, just return to poll loop
@@ -337,19 +330,29 @@ int process_client_requests(int client_fd)
   }
 
   buffer[bytes] = '\0'; 
-  char *newline = strchr(buffer, '\n'); 
-  if (newline)
-    *newline = '\0'; 
-  
-  /* the server expects 1-2 arguments per assembly output
-   * seperated by a space and terminated by an optional newline */
-  char *label; 
-  char *file_name = buffer; 
-  char *space = strchr(buffer, ' '); 
-  if (space) {
-    label = space+1; 
-    *space = '\0'; 
+
+  // the buffer now comes in as a JSON, one level for easy parsing.
+  cJSON *request = cJSON_Parse(buffer);
+  if (request == NULL) {
+    fprintf(stderr, "Error: [cJSON] cJSON_Parse - %s\n", cJSON_GetErrorPtr());
+    return ASM_INST_FAIL; 
   }
+
+  cJSON *filepath = cJSON_GetObjectItemCaseSensitive(request, "filepath");
+  if (!filepath) {
+    fprintf(stderr, "Error: [cJSON] cJSON_GetObjectItemCaseSensitive - %s\n", cJSON_GetErrorPtr());
+    cJSON_free(request); 
+    return ASM_INST_FAIL; 
+  }
+
+  char *file_name = cJSON_GetStringValue(filepath); 
+  if (!file_name) {
+    fprintf(stderr, "Error: [cJSON] cJSON_GetStringValue - %s\n", cJSON_GetErrorPtr());
+    cJSON_free(request); 
+    return ASM_INST_FAIL; 
+  }
+  
+  cJSON_free(request); 
 
   AsmInstance *inst = get_asm_instance(hash_table, HT_SIZE, file_name);  
 
@@ -363,21 +366,11 @@ int process_client_requests(int client_fd)
     fprintf(stderr, "[asm viewer] error - failed to compile filtered assembly\n");
     return ASM_INST_FAIL; 
   }
-  
-  AsmInstance_write_header(inst, client_fd); 
-
-  if (space) {
-    if (AsmInstance_write_label(inst, label, client_fd) != ASM_INST_OK) {
-      fprintf(stderr, "[asm viewer] error - failed to stream label assembly\n");
-      return ASM_INST_FAIL; 
-    }
-  }
-  else {
-    if (AsmInstance_write_all(inst, client_fd) != ASM_INST_OK) {
-      fprintf(stderr, "[asm viewer] error - failed to stream assembly\n");
-      return ASM_INST_FAIL; 
-    }
-  }
+ 
+  /* small json responce, vim internals make this an easy parse */
+  char *assembly = AsmInstance_get_asm(inst); 
+  char *filename = AsmInstance_get_filename(inst); 
+  dprintf(client_fd,"{\"filepath\": \"%s\", \"asm\": \"%s\"}\n", filename, assembly);  
 
   return ASM_INST_OK; 
 }

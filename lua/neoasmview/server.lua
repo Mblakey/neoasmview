@@ -92,15 +92,17 @@ function M.start()
         return
       end
       
-      local payload = data:sub(7)  -- everything after "VIMASM"
-      local pos = string.find(payload, "\0")
+      local ok, json_obj = pcall(vim.json.decode, data)
 
-      if pos then
-        filepath = string.sub(payload, 1, pos - 1)
-        rest = string.sub(payload, pos + 1)
+      if not ok then
+        print("[vimasm] invalid JSON request")
+        return
       end
-      
-      M.send_to_buffer(filepath, rest)
+
+      local filepath = json_obj.filepath
+      local asm = json_obj.asm
+
+      M.send_to_buffer(filepath, asm)
     end))
   end)
 
@@ -202,10 +204,14 @@ function M.send_request(filename)
     print("[vimasm] server socket not available")
     return
   end
-
-  local request = filename .. "\n"
   
-  uv.write(M.client, request, function(err)
+  local request = {
+    filepath = filename,
+  }
+  
+  local json = vim.json.encode(request) .. "\n"
+  
+  uv.write(M.client, json, function(err)
     if err then
       print("[vimasm] failed to write to server socket:", err)
     end

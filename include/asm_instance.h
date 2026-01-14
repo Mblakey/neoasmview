@@ -45,18 +45,10 @@ void         AsmInstance_free(AsmInstance*) __nonnull((1));
 cJSON* AsmInstance_get_compile_node(AsmInstance *inst) __nonnull((1)); 
 char*  AsmInstance_get_filename(AsmInstance *inst) __nonnull((1)); 
 char*  AsmInstance_get_cmd(AsmInstance *inst) __nonnull((1)); 
+char*  AsmInstance_get_asm(AsmInstance *inst) __nonnull((1)); 
 
-int    AsmInstance_set_compile_node_gcc(AsmInstance*, cJSON*) __nonnull((1,2)); 
-
-int    AsmInstance_command_C(AsmInstance*) __nonnull((1)); 
+int    AsmInstance_parse_command_C(AsmInstance*, cJSON*) __nonnull((1,2)); 
 int    AsmInstance_compile_C(AsmInstance*) __nonnull((1));
 
-int    AsmInstance_pipe_header(AsmInstance*, FILE*) __nonnull((1,2)); 
-int    AsmInstance_write_header(AsmInstance*, int) __nonnull((1)); 
 
-int    AsmInstance_pipe_label(AsmInstance*, char*, FILE*) __nonnull((1,2,3)); 
-int    AsmInstance_write_label(AsmInstance*, char*, int) __nonnull((1,2)); 
-
-int    AsmInstance_pipe_all(AsmInstance*, FILE*) __nonnull((1,2)); 
-int    AsmInstance_write_all(AsmInstance*, int) __nonnull((1)); 
 #endif

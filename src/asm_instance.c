@@ -40,7 +40,16 @@ char* AsmInstance_get_cmd(AsmInstance *inst)
 }
 
 
-int AsmInstance_set_compile_node_gcc(AsmInstance *inst, cJSON *root) 
+char* AsmInstance_get_asm(AsmInstance *inst) 
+{
+  char *asm_buffer = inst->asm_buffer; 
+  if (!asm_buffer || !inst->asm_buflen)
+    return NULL; 
+  return asm_buffer; 
+}
+
+
+int AsmInstance_parse_command_C(AsmInstance *inst, cJSON *root) 
 {
   /* 
    * compile_commands.json has a specific structure
@@ -50,26 +59,21 @@ int AsmInstance_set_compile_node_gcc(AsmInstance *inst, cJSON *root)
 
   if (*filename == '\0')
     return ASM_INST_FAIL; 
-
+  
+  cJSON *compile_node = NULL;
   for (cJSON *node = root->child; node; node = node->next) {
     cJSON *name_node = cJSON_GetObjectItemCaseSensitive(node, "file");
     char *str = cJSON_GetStringValue(name_node); 
     if (name_node && strcmp(str, filename) == 0) {
-      inst->compile_node = node; 
-      return ASM_INST_OK;
+      compile_node = node; 
+      break;
     }
   }
-
-  return ASM_INST_FAIL; 
-}
-
-
-int AsmInstance_command_C(AsmInstance *inst) 
-{
-  cJSON *compile_node = AsmInstance_get_compile_node(inst); 
+  
   if (!compile_node)
     return ASM_INST_FAIL; 
 
+  inst->compile_node = compile_node;
   cJSON *command_node = cJSON_GetObjectItemCaseSensitive(compile_node, 
                                                          "command");
   if (!command_node) 
@@ -109,6 +113,7 @@ int AsmInstance_command_C(AsmInstance *inst)
   }
 
   strcat(inst->rebuild_command, " -S -g1 -fno-inline -fcf-protection=none -fno-unwind-tables -fno-asynchronous-unwind-tables -masm=intel -o - 2> /dev/null"); 
+
   return ASM_INST_OK; 
 }
 
@@ -199,44 +204,12 @@ int AsmInstance_compile_C(AsmInstance *inst)
     }
   }
   
-  asm_buffer[asm_len] = '\0'; // safety for strchr
+  asm_buffer[asm_len] = '\0'; // safety for strchr and ptr return
   pclose(p);
   
   inst->asm_buflen   = asm_len; 
   inst->time_changed = sb.st_mtime; 
   inst->asm_buffer   = asm_buffer; 
-  return ASM_INST_OK; 
-}
-
-
-int AsmInstance_pipe_header(AsmInstance *inst, FILE *ofp) 
-{
-  const char *file = AsmInstance_get_filename(inst); 
-  if (*file == '\0')
-    return ASM_INST_FAIL; 
-
-  const size_t len = strlen(file); 
-  
-  fwrite(ASM_INST_HEADER, 6, 1, ofp); 
-  fwrite(file, len, 1, ofp); 
-  fputc('\0', ofp); 
-
-  return ASM_INST_OK; 
-}
-
-
-int AsmInstance_write_header(AsmInstance *inst, int fd) 
-{
-  const char *file = AsmInstance_get_filename(inst); 
-  if (*file == '\0')
-    return ASM_INST_FAIL; 
-
-  const size_t len = strlen(file); 
-  
-  write(fd, ASM_INST_HEADER, 6); 
-  write(fd, file, len); 
-  write(fd, "\0", 1); 
-
   return ASM_INST_OK; 
 }
 
@@ -311,21 +284,3 @@ int AsmInstance_write_label(AsmInstance *inst, char *label, int fd)
 }
 
 
-int AsmInstance_pipe_all(AsmInstance *inst, FILE *ofp) 
-{
-  char *asm_buffer = inst->asm_buffer; 
-  if (!asm_buffer || !inst->asm_buflen)
-    return ASM_INST_FAIL; 
-  fwrite(asm_buffer, inst->asm_buflen, 1, ofp); 
-  return ASM_INST_OK; 
-}
-
-
-int AsmInstance_write_all(AsmInstance *inst, int fd) 
-{
-  char *asm_buffer = inst->asm_buffer; 
-  if (!asm_buffer || !inst->asm_buflen)
-    return ASM_INST_FAIL; 
-  write(fd, asm_buffer, inst->asm_buflen); 
-  return ASM_INST_OK; 
-}
