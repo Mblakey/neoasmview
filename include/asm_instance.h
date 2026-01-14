@@ -29,7 +29,7 @@
 
 typedef struct AsmInstance {
   char infile[PATH_MAX];          
-  char rebuild_command[PATH_MAX];
+  char *rebuild_command;
   cJSON *compile_node; 
   char  *asm_buffer; 
   unsigned long long time_changed; 

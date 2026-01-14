@@ -3,6 +3,29 @@
 #include "asm_instance.h"
 
 
+static bool check_tool(const char *cmd) {
+  char *path = getenv("PATH");
+  if (!path) 
+    return false;
+
+  char buf[PATH_MAX];
+  char *paths = strdup(path);
+  char *saveptr = NULL;
+  
+  char *p = strtok_r(paths, ":", &saveptr);
+  for (; p; p = strtok_r(NULL, ":", &saveptr)) {
+    snprintf(buf, sizeof(buf), "%s/%s", p, cmd);
+    if (access(buf, X_OK) == 0) {
+      free(paths);
+      return true; 
+    }
+  }
+
+  free(paths);
+  return false;
+}
+
+
 AsmInstance* AsmInstance_alloc(char *fname) 
 {
   AsmInstance *inst = (AsmInstance*)malloc(sizeof(AsmInstance)); 
@@ -19,6 +42,8 @@ void AsmInstance_free(AsmInstance *inst)
 {
   if (inst->asm_buffer)
     free(inst->asm_buffer); 
+  if (inst->rebuild_command)
+    free(inst->rebuild_command); 
   free(inst); 
 }
 
@@ -100,6 +125,7 @@ int AsmInstance_parse_command_C(AsmInstance *inst, cJSON *root)
     return ASM_INST_FAIL; 
 
   const size_t len = strlen(str); 
+  inst->rebuild_command = (char*)malloc(PATH_MAX + len); 
   
   int j = 0; 
   for (unsigned int i=0; i<len; i++) {
@@ -125,6 +151,18 @@ int AsmInstance_parse_command_C(AsmInstance *inst, cJSON *root)
   }
 
   strcat(inst->rebuild_command, " -S -g1 -fno-inline -fcf-protection=none -fno-unwind-tables -fno-asynchronous-unwind-tables -masm=intel -o - 2> /dev/null"); 
+
+  char *ext = strrchr(filename, '.'); 
+  if (ext) {
+    ext++; 
+    /* demangler for C++ */
+    if ((strcmp(ext, "cpp")==0 || strcmp(ext, "hpp")==0) &&
+         check_tool("c++filt")) 
+    {
+      /* do we have c++filt avaliable */
+      strcat(inst->rebuild_command, " | c++filt"); 
+    }
+  }
 
   return ASM_INST_OK; 
 }

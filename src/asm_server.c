@@ -91,29 +91,6 @@ static bool search_file(const char *dirpath, const char *filename)
 }
 
 
-static bool check_tool(const char *cmd) {
-  char *path = getenv("PATH");
-  if (!path) 
-    return false;
-
-  char buf[PATH_MAX];
-  char *paths = strdup(path);
-  char *saveptr = NULL;
-  
-  char *p = strtok_r(paths, ":", &saveptr);
-  for (; p; p = strtok_r(NULL, ":", &saveptr)) {
-    snprintf(buf, sizeof(buf), "%s/%s", p, cmd);
-    if (access(buf, X_OK) == 0) {
-      free(paths);
-      return true; 
-    }
-  }
-
-  free(paths);
-  return false;
-}
-
-
 static bool find_project_file(const char *project_file) 
 {
   strcat(project_dir, "/"); 
@@ -276,12 +253,6 @@ static AsmInstance* get_asm_instance(struct hash_entry *hash_table[],
     fprintf(stderr, "[asm viewer] error - file %s not found in parsed compile_commands.json\n", inst->infile); 
     free(inst); 
     return NULL; 
-  }
-
-  /* append a filter here, e.g if C++ */
-
-  if (!check_tool("c++filt")) {
-    fprintf(stderr, "no tool called c++filt in a global path\n"); 
   }
 
   slot = hash_table[hash_idx]; 
