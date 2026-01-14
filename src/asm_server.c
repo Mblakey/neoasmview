@@ -343,36 +343,7 @@ int process_client_requests(int client_fd)
     return ASM_INST_FAIL; 
   }
 
-  /* that command gets parsed into our asm viewer */
-  if (AsmInstance_compile_C(inst) != ASM_INST_OK)  {
-    fprintf(stderr, "[asm viewer] error - failed to compile filtered assembly\n");
-    return ASM_INST_FAIL; 
-  }
- 
-  /* "small" json responce, vim internals make this an easy parse */
-  char *assembly = AsmInstance_get_asm(inst); 
-  char *filename = AsmInstance_get_filename(inst); 
-  
-  const size_t brackets_cnt = 2;
-  const size_t colon_cnt    = 2;
-  const size_t comma_cnt    = 2;
-  const size_t quotes_cnt   = 4;
-  const size_t field_len = 8 + 3; // filepath and asm 
-  const size_t filename_len = strlen(filename); 
-
-  const uint32_t msg_bytes = brackets_cnt + 
-                             colon_cnt +
-                             comma_cnt + 
-                             quotes_cnt +
-                             field_len +
-                             filename_len +
-                             inst->asm_buflen;
-  
-  /* prefix the number of bytes for iterative decoding on the other side 
-   * its a shame i cant let lua just look at this memory.. classic IPC */
-  write(client_fd, &msg_bytes, sizeof(uint32_t)); 
-  dprintf(client_fd,"{\"filepath\":\"%s\",\"asm\":\"%s\"}", filename, assembly);   
-  return ASM_INST_OK; 
+  return AsmInstance_asm_message_C(inst, client_fd); 
 }
 
 

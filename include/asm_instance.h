@@ -3,6 +3,7 @@
 
 #include <stdlib.h>
 #include <stdio.h>
+#include <stdint.h>
 #include <stdbool.h>
 
 #include <string.h>
@@ -48,7 +49,8 @@ char*  AsmInstance_get_asm(AsmInstance *inst) __nonnull((1));
 const char*  AsmInstance_get_filetype(AsmInstance *inst) __nonnull((1)); 
 
 int    AsmInstance_parse_command_C(AsmInstance*, cJSON*) __nonnull((1,2)); 
-int    AsmInstance_compile_C(AsmInstance*) __nonnull((1));
+int    AsmInstance_asm_message_C(AsmInstance*, int) __nonnull((1)); 
+int    AsmInstance_function_message_C(AsmInstance*, int) __nonnull((1));
 
 
 #endif

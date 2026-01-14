@@ -270,72 +270,133 @@ int AsmInstance_compile_C(AsmInstance *inst)
 }
 
 
-int AsmInstance_pipe_label(AsmInstance *inst, char *label, FILE *ofp) 
+int AsmInstance_function_message_C(AsmInstance *inst, int fd)
 {
-  char *asm_buffer = inst->asm_buffer; 
-  if (!asm_buffer)
+  size_t bytes; 
+  char buffer[ASM_WINDOW]; 
+
+  int i = 0; 
+  int func_len = 0; 
+  char function_name[8192]; 
+    
+  unsigned int state = 0; 
+  const char *type = ".type";
+  const char *label = "function";
+
+  char *cmd = AsmInstance_get_cmd(inst); 
+  if (!cmd)
     return ASM_INST_FAIL; 
 
-  char *prev = asm_buffer;  
-  char *ptr = asm_buffer;  
+  /* first check if there has been a modification */
+  const char *file = AsmInstance_get_filename(inst); 
+  if (*file == '\0')
+    return ASM_INST_FAIL; 
 
-  const size_t len = strlen(label); 
-
-  while ((ptr = strchr(ptr, '\n'))) {
-    // does the line start with <label>:
-    if (memcmp(label, prev, len) == 0) {
-      fwrite(prev, ptr-prev+1, 1, ofp);
-      prev = ++ptr; 
-
-      while ((ptr = strchr(ptr, '\n'))) {
-        if (*prev != '\t')
-          break; 
-
-        fwrite(prev, ptr-prev+1, 1, ofp);
-        prev = ++ptr; 
-      }
-      return ASM_INST_OK; 
-    }
-
-    prev = ++ptr; 
+  FILE *fp = popen(cmd,"r");
+  if (!fp) {
+    fprintf(stderr, "Error: [libc] popen - %s\n", strerror(errno)); 
+    return ASM_INST_FAIL; 
   }
-  
-  fprintf(stderr, "Error: no label named %s found in assembly output\n", label); 
+
+  while((bytes = fread(buffer, 1, sizeof(buffer), fp))) {
+    i = 0; 
+jmp_type_state:
+    for (; i<bytes; i++) {
+      unsigned char ch = buffer[i];
+      if (type[state] == ch)
+        state++;
+      else 
+        state = 0; 
+
+      if (state == 5) {
+        func_len = 0;
+        i++; 
+        goto jmp_read_state;
+      }
+    } 
+  }
+  fclose(fp); 
+  return ASM_INST_OK; 
+
+  while((bytes = fread(buffer, 1, sizeof(buffer), fp))) {
+    i = 0; 
+jmp_read_state:
+    for (; i<bytes; i++) {
+      unsigned char ch = buffer[i];
+      if (ch == '@') {
+        state = 0; 
+        i++; 
+        goto jmp_label_state; 
+      }
+      function_name[func_len++] = ch;
+    }
+  }
+  fclose(fp); 
+  return ASM_INST_OK; 
+
+  while((bytes = fread(buffer, 1, sizeof(buffer), fp))) {
+    i = 0; 
+jmp_label_state:
+    for (; i<bytes; i++) {
+      unsigned char ch = buffer[i];
+      if (label[state] == ch)
+        state++;
+      else {
+        goto jmp_type_state;
+        state = 0; 
+      }
+
+      if (state == 8) {
+        for (; func_len >= 0; func_len--) {
+          if (function_name[func_len] == ',')
+            break;
+        }
+
+        function_name[func_len] = '\0';
+
+        char *p = function_name; 
+        while (p && (*p == ' ' || *p == '\t'))
+          p++; 
+        dprintf(fd, "%s\n", p); 
+        goto jmp_type_state;
+      }
+    } 
+  }
+  fclose(fp); 
   return ASM_INST_OK; 
 }
 
 
-int AsmInstance_write_label(AsmInstance *inst, char *label, int fd) 
+int AsmInstance_asm_message_C(AsmInstance *inst, int client_fd) 
 {
-  char *asm_buffer = inst->asm_buffer; 
-  if (!asm_buffer)
+  if (AsmInstance_compile_C(inst) != ASM_INST_OK)  {
+    fprintf(stderr, "[asm viewer] error - failed to compile filtered assembly\n");
     return ASM_INST_FAIL; 
-
-  char *prev = asm_buffer;  
-  char *ptr = asm_buffer;  
-
-  const size_t len = strlen(label); 
-
-  while ((ptr = strchr(ptr, '\n'))) {
-    // does the line start with <label>:
-    if (memcmp(label, prev, len) == 0) {
-      write(fd, prev, ptr-prev+1);
-      prev = ++ptr; 
-
-      while ((ptr = strchr(ptr, '\n'))) {
-        if (*prev != '\t')
-          break; 
-        
-        write(fd, prev, ptr-prev+1);
-        prev = ++ptr; 
-      }
-      return ASM_INST_OK; 
-    }
-
-    prev = ++ptr; 
   }
+ 
+  /* "small" json responce, vim internals make this an easy parse */
+  char *assembly = AsmInstance_get_asm(inst); 
+  char *filename = AsmInstance_get_filename(inst); 
   
-  dprintf(fd, "Error: no label named %s found in assembly output\n", label); 
+  const size_t brackets_cnt = 2;
+  const size_t colon_cnt    = 2;
+  const size_t comma_cnt    = 2;
+  const size_t quotes_cnt   = 4;
+  const size_t field_len = 8 + 3; // filepath and asm 
+  const size_t filename_len = strlen(filename); 
+
+  const uint32_t msg_bytes = brackets_cnt + 
+                             colon_cnt +
+                             comma_cnt + 
+                             quotes_cnt +
+                             field_len +
+                             filename_len +
+                             inst->asm_buflen;
+  
+  /* prefix the number of bytes for iterative decoding on the other side 
+   * its a shame i cant let lua just look at this memory.. classic IPC */
+  write(client_fd, &msg_bytes, sizeof(uint32_t)); 
+  dprintf(client_fd,"{\"filepath\":\"%s\",\"asm\":\"%s\"}", filename, assembly);   
   return ASM_INST_OK; 
 }
 
