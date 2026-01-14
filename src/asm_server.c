@@ -334,7 +334,6 @@ int process_client_requests(int client_fd)
     cJSON_free(js_request); 
     return ASM_INST_FAIL; 
   }
-
   cJSON_free(js_request); 
 
   AsmInstance *inst = get_asm_instance(hash_table, HT_SIZE, file_name);  
@@ -342,14 +341,29 @@ int process_client_requests(int client_fd)
     fprintf(stderr, "[asm viewer] error - failed to create asm instance\n");  
     return ASM_INST_FAIL; 
   }
-  
-  if (strcmp(command, "assembly")==0)
-    return AsmInstance_asm_message_C(inst, client_fd); 
-  else if (strcmp(command, "functions")==0) {
-    return AsmInstance_function_message_C(inst, client_fd); 
+
+  char *ext = strrchr(file_name, '.');
+  if (!ext)
+    return ASM_INST_FAIL;
+  ext++;
+
+  if (strcmp(ext, "c")   == 0 ||
+      strcmp(ext, "cpp") == 0 ||
+      strcmp(ext, "h")   == 0 ||
+      strcmp(ext, "hpp") == 0)
+  {
+    if (strcmp(command, "assembly")==0)
+      return AsmInstance_asm_message_C(inst, client_fd); 
+    else if (strcmp(command, "functions")==0) 
+      return AsmInstance_function_message_C(inst, client_fd); 
+    else 
+      return ASM_INST_FAIL; 
   }
-  else 
+  else if (strcmp(ext, "rs")==0) {
+    
     return ASM_INST_FAIL; 
+  }
+  else return ASM_INST_FAIL; 
 }
 
 

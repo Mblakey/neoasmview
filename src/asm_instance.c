@@ -280,8 +280,11 @@ int AsmInstance_function_message_C(AsmInstance *inst, int client_fd)
   char function_name[8192]; 
     
   unsigned int state = 0; 
-  const char *type = ".type";
-  const char *label = "function";
+  const char *type = "\t.type";
+  const char *label = "@function\n";
+
+  const size_t type_chars = strlen(type);
+  const size_t label_chars = strlen(label);
 
   size_t buf_len = 0; 
   size_t buf_max = 16384;
@@ -300,7 +303,7 @@ int AsmInstance_function_message_C(AsmInstance *inst, int client_fd)
     fprintf(stderr, "Error: [libc] popen - %s\n", strerror(errno)); 
     return ASM_INST_FAIL; 
   }
-
+  
   while((bytes = fread(buffer, 1, sizeof(buffer), fp))) {
     i = 0; 
 jmp_type_state:
@@ -311,9 +314,8 @@ jmp_type_state:
       else 
         state = 0; 
 
-      if (state == 5) {
-        func_len = 0;
-        i++; 
+      if (state == type_chars) {
+        func_len = 0; state = 0; i++; 
         goto jmp_read_state;
       }
     } 
@@ -327,7 +329,6 @@ jmp_read_state:
       unsigned char ch = buffer[i];
       if (ch == '@') {
         state = 0; 
-        i++; 
         goto jmp_label_state; 
       }
       function_name[func_len++] = ch;
@@ -343,11 +344,11 @@ jmp_label_state:
       if (label[state] == ch)
         state++;
       else {
-        goto jmp_type_state;
         state = 0; 
+        goto jmp_type_state;
       }
 
-      if (state == 8) {
+      if (state == label_chars) {
         for (; func_len >= 0; func_len--) {
           if (function_name[func_len] == ',')
             break;
@@ -359,7 +360,7 @@ jmp_label_state:
         while (p && (*p == ' ' || *p == '\t'))
           p++; 
         size_t flen = strlen(p);
-
+          
         if (buf_len + flen+1 > buf_max) {
           buf_max *= 2; 
           char *new_buffer = realloc(msg_buffer, buf_max);
@@ -371,6 +372,7 @@ jmp_label_state:
           }
           msg_buffer = new_buffer; 
         }
+
         memcpy(msg_buffer+buf_len, p, flen);
         buf_len += flen; 
         msg_buffer[buf_len++] = '\n';
@@ -378,10 +380,13 @@ jmp_label_state:
         goto jmp_type_state;
       }
     } 
-    goto jmp_write_message;
   }
 
+
 jmp_write_message:
+  msg_buffer[buf_len] = '\0';
+  if (!buf_len)
+    return ASM_INST_FAIL; 
 
   const size_t brackets_cnt = 2;
   const size_t colon_cnt    = 2;
@@ -397,7 +402,7 @@ jmp_write_message:
                              field_len +
                              filename_len +
                              buf_len;
-
+  
   /* prefix the number of bytes for iterative decoding on the other side 
    * its a shame i cant let lua just look at this memory.. classic IPC */
   write(client_fd, &msg_bytes, sizeof(uint32_t)); 
