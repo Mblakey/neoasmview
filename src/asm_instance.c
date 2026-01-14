@@ -405,7 +405,11 @@ jmp_write_message:
   
   /* prefix the number of bytes for iterative decoding on the other side 
    * its a shame i cant let lua just look at this memory.. classic IPC */
-  write(client_fd, &msg_bytes, sizeof(uint32_t)); 
+  if (write(client_fd, &msg_bytes, sizeof(uint32_t)) == -1) {
+    fprintf(stderr, "Error [libc] write - %s\n", strerror(errno));
+    return ASM_INST_FAIL; 
+  } 
+
   dprintf(client_fd,"{\"filepath\":\"%s\",\"asm\":\"%s\"}", filename, msg_buffer);   
   
   free(msg_buffer); 
@@ -442,7 +446,11 @@ int AsmInstance_asm_message_C(AsmInstance *inst, int client_fd)
   
   /* prefix the number of bytes for iterative decoding on the other side 
    * its a shame i cant let lua just look at this memory.. classic IPC */
-  write(client_fd, &msg_bytes, sizeof(uint32_t)); 
+  if (write(client_fd, &msg_bytes, sizeof(uint32_t)) == -1) {
+    fprintf(stderr, "Error [libc] write - %s\n", strerror(errno));
+    return ASM_INST_FAIL; 
+  }
+
   dprintf(client_fd,"{\"filepath\":\"%s\",\"asm\":\"%s\"}", filename, assembly);   
   return ASM_INST_OK; 
 }
