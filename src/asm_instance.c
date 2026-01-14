@@ -224,6 +224,7 @@ int AsmInstance_parse_command_RUST(AsmInstance *inst, cJSON *root)
     
     inst->rebuild_command[j++] = str[i]; 
 
+
     if (state == emit_len) {
       memcpy(inst->rebuild_command+j, "asm ", 4); 
       j += 4;
@@ -238,12 +239,10 @@ int AsmInstance_parse_command_RUST(AsmInstance *inst, cJSON *root)
     }
   }
   inst->rebuild_command[j] = '\0'; 
-
-  strcat(inst->rebuild_command, " -o - -C opt-level=3 2> /dev/null");  
+  
+  strcat(inst->rebuild_command, " -o - -C opt-level=3 -C llvm-args=--x86-asm-syntax=intel 2> /dev/null");  
   if (check_tool("rustfilt")) 
     strcat(inst->rebuild_command, " | rustfilt"); 
-
-  fprintf(stderr, "%s\n", inst->rebuild_command); 
   return ASM_INST_OK; 
 }
 

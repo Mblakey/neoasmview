@@ -158,6 +158,7 @@ static cJSON* parse_project_commands()
 static void display_usage()
 {
   fprintf(stderr, "asm-server [project dir]\n"); 
+  fprintf(stderr, "asm-server [project dir]\n"); 
   exit(1); 
 }
 
@@ -368,12 +369,13 @@ int process_client_requests(int client_fd)
     return ASM_INST_FAIL; 
   }
   
-    if (strcmp(command, "assembly")==0)
-      return AsmInstance_assembly_message(inst, client_fd); 
-    else if (strcmp(command, "functions")==0) 
-      return AsmInstance_function_message(inst, client_fd); 
-    else 
-      return ASM_INST_FAIL; 
+
+  if (strcmp(command, "assembly")==0)
+    return AsmInstance_assembly_message(inst, client_fd); 
+  else if (strcmp(command, "functions")==0) 
+    return AsmInstance_function_message(inst, client_fd); 
+  else 
+    return ASM_INST_FAIL; 
 }
 
 

@@ -115,7 +115,8 @@ function M.start()
 
       if msg_size and #buffer >= msg_size then
         local ok, json_obj = pcall(vim.json.decode, buffer)
-        buffer = "" -- reset the buffer
+        buffer = "" 
+        msg_size = nil
         if not ok then
           print("[vimasm] invalid JSON request")
           return
