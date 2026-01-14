@@ -158,6 +158,7 @@ function M.open_vertical()
     end
     
     local filename = M.get_current_buffer_path()
+    local ft = vim.api.nvim_buf_get_option(0, "filetype")
     local buf = M.file_to_buf[filename] 
 
     if buf then 
@@ -191,15 +192,15 @@ function M.open_vertical()
     vim.api.nvim_create_autocmd("BufWritePost", {
       buffer = cur_buf, 
       callback = function()
-        M.send_request(filename)
+        M.send_request(filename, ft)
       end
     })
     
-    M.send_request(filename)
+    M.send_request(filename, ft)
 end
 
 
-function M.send_request(filename)
+function M.send_request(filename, filetype)
   if not M.startup_done then
     print("[vimasm] server socket not available")
     return
@@ -207,6 +208,7 @@ function M.send_request(filename)
   
   local request = {
     filepath = filename,
+    filetype = filetype,
   }
   
   local json = vim.json.encode(request) .. "\n"
@@ -270,11 +272,13 @@ function M.setup()
     "VimasmASM",                 
     function()                  
       local filename = M.get_buf_filename()  
+      local filetype = vim.api.nvim_buf_get_option(0, "filetype")
+
       if not filename then
         vim.notify("[vimasm] No file associated with current buffer", vim.log.levels.WARN)
         return
       end
-      M.send_request(filename)
+      M.send_request(filename, filetype)
     end, {}
   )
 end

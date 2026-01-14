@@ -2,6 +2,30 @@
 
 #include "asm_instance.h"
 
+
+static bool test_cmd(const char *cmd) {
+  char *path = getenv("PATH");
+  if (!path) 
+    return false;
+
+  char buf[PATH_MAX];
+  char *paths = strdup(path);
+  char *saveptr = NULL;
+  
+  char *p = strtok_r(paths, ":", &saveptr);
+  for (; p; p = strtok_r(NULL, ":", &saveptr)) {
+    snprintf(buf, sizeof(buf), "%s/%s", p, cmd);
+    if (access(buf, X_OK) == 0) {
+      free(paths);
+      return true; 
+    }
+  }
+
+  free(paths);
+  return false;
+}
+
+
 AsmInstance* AsmInstance_alloc(char *fname) 
 {
   AsmInstance *inst = (AsmInstance*)malloc(sizeof(AsmInstance)); 
