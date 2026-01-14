@@ -30,9 +30,6 @@
 #define PAGE_SIZE 4096
 #define ASM_WINDOW 4*PAGE_SIZE
 
-#define SERVER_TYPE_C    0
-#define SERVER_TYPE_RUST 1
-
 char project_dir[PATH_MAX] = {0}; // reuse for compile_commands.json path
 char socket_path[PATH_MAX] = {0}; 
 
@@ -227,7 +224,8 @@ static uint16_t string_hash(const char *str)
 
 static AsmInstance* get_asm_instance(struct hash_entry *hash_table[], 
                                      size_t ht_size, 
-                                     char *key)
+                                     char *key, 
+                                     char file_type)
 {
   char expand_key[PATH_MAX]; 
   if (!realpath(key, expand_key)) 
@@ -248,8 +246,17 @@ static AsmInstance* get_asm_instance(struct hash_entry *hash_table[],
     fprintf(stderr, "[asm viewer] error - failed to create asm instance\n");  
     return NULL; 
   }
-
-  if (AsmInstance_parse_command_C(inst, compile_commands_json) != ASM_INST_OK) {
+  
+  if (file_type == FILE_TYPE_C && 
+      AsmInstance_parse_command_C(inst, compile_commands_json) != ASM_INST_OK) 
+  {
+    fprintf(stderr, "[asm viewer] error - file %s not found in parsed compile_commands.json\n", inst->infile); 
+    free(inst); 
+    return NULL; 
+  }
+  else if (file_type == FILE_TYPE_RUST && 
+           AsmInstance_parse_command_RUST(inst, compile_commands_json) != ASM_INST_OK) 
+  {
     fprintf(stderr, "[asm viewer] error - file %s not found in parsed compile_commands.json\n", inst->infile); 
     free(inst); 
     return NULL; 
@@ -335,13 +342,8 @@ int process_client_requests(int client_fd)
     return ASM_INST_FAIL; 
   }
   cJSON_free(js_request); 
-
-  AsmInstance *inst = get_asm_instance(hash_table, HT_SIZE, file_name);  
-  if (!inst) {
-    fprintf(stderr, "[asm viewer] error - failed to create asm instance\n");  
-    return ASM_INST_FAIL; 
-  }
-
+  
+  char file_type = 0; // 0 - C, 1 - rust;
   char *ext = strrchr(file_name, '.');
   if (!ext)
     return ASM_INST_FAIL;
@@ -352,18 +354,26 @@ int process_client_requests(int client_fd)
       strcmp(ext, "h")   == 0 ||
       strcmp(ext, "hpp") == 0)
   {
-    if (strcmp(command, "assembly")==0)
-      return AsmInstance_asm_message_C(inst, client_fd); 
-    else if (strcmp(command, "functions")==0) 
-      return AsmInstance_function_message_C(inst, client_fd); 
-    else 
-      return ASM_INST_FAIL; 
+    file_type = FILE_TYPE_C;
   }
   else if (strcmp(ext, "rs")==0) {
-    
+    file_type = FILE_TYPE_RUST;
+  }
+  else 
+    return ASM_INST_FAIL; 
+
+  AsmInstance *inst = get_asm_instance(hash_table, HT_SIZE, file_name, file_type);  
+  if (!inst) {
+    fprintf(stderr, "[asm viewer] error - failed to create asm instance\n");  
     return ASM_INST_FAIL; 
   }
-  else return ASM_INST_FAIL; 
+  
+    if (strcmp(command, "assembly")==0)
+      return AsmInstance_assembly_message(inst, client_fd); 
+    else if (strcmp(command, "functions")==0) 
+      return AsmInstance_function_message(inst, client_fd); 
+    else 
+      return ASM_INST_FAIL; 
 }
 
 
@@ -380,15 +390,8 @@ int main(int argc, char *argv[])
   sigaction(SIGTERM, &sa, NULL);
   signal(SIGPIPE, SIG_IGN);
 
-  char server_type; 
-  
   if (find_project_file("compile_commands.json")) {
-    server_type = SERVER_TYPE_C;  
     fprintf(stderr, "[asm viewer] compile_commands.json found\n"); 
-  }
-  else if (find_project_file("Cargo.toml")) {
-    server_type = SERVER_TYPE_RUST;  
-    fprintf(stderr, "[asm viewer] Cargo.toml found\n"); 
   }
   else {
     fprintf(stderr, "Error: could not find project commands\n"); 

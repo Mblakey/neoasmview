@@ -49,8 +49,10 @@ char*  AsmInstance_get_asm(AsmInstance *inst) __nonnull((1));
 const char*  AsmInstance_get_filetype(AsmInstance *inst) __nonnull((1)); 
 
 int    AsmInstance_parse_command_C(AsmInstance*, cJSON*) __nonnull((1,2)); 
-int    AsmInstance_asm_message_C(AsmInstance*, int) __nonnull((1)); 
-int    AsmInstance_function_message_C(AsmInstance*, int) __nonnull((1));
+int    AsmInstance_parse_command_RUST(AsmInstance*, cJSON*) __nonnull((1,2)); 
+
+int    AsmInstance_assembly_message(AsmInstance*, int) __nonnull((1)); 
+int    AsmInstance_function_message(AsmInstance*, int) __nonnull((1));
 
 
 #endif

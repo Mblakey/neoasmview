@@ -149,6 +149,7 @@ int AsmInstance_parse_command_C(AsmInstance *inst, cJSON *root)
 
     inst->rebuild_command[j++] = str[i]; 
   }
+  inst->rebuild_command[j] = '\0'; 
 
   strcat(inst->rebuild_command, " -S -g1 -fno-inline -fcf-protection=none -fno-unwind-tables -fno-asynchronous-unwind-tables -masm=intel -o - 2> /dev/null"); 
 
@@ -168,7 +169,85 @@ int AsmInstance_parse_command_C(AsmInstance *inst, cJSON *root)
 }
 
 
-int AsmInstance_compile_C(AsmInstance *inst) 
+int AsmInstance_parse_command_RUST(AsmInstance *inst, cJSON *root)
+{
+  /* 
+   * compile_commands.json has a specific structure that comes from 
+   * my internal tooling bear_cargo
+   * 
+   */
+  char *filename = AsmInstance_get_filename(inst);
+  if (*filename == '\0')
+    return ASM_INST_FAIL; 
+  
+  cJSON *compile_node = NULL;
+  for (cJSON *node = root->child; node; node = node->next) {
+    cJSON *name_node = cJSON_GetObjectItemCaseSensitive(node, "file");
+    char *str = cJSON_GetStringValue(name_node); 
+    if (name_node && strcmp(str, filename) == 0) {
+      compile_node = node; 
+      break;
+    }
+  }
+  
+  if (!compile_node)
+    return ASM_INST_FAIL; 
+
+  inst->compile_node = compile_node;
+  cJSON *command_node = cJSON_GetObjectItemCaseSensitive(compile_node, 
+                                                         "command");
+  if (!command_node) 
+    return ASM_INST_FAIL; 
+  
+  /* 
+   * parse keeping all the arguments apart from the -o path, 
+   * which we turn into -
+   */
+  char *str = cJSON_GetStringValue(command_node); 
+  if (!str)
+    return ASM_INST_FAIL; 
+
+  const size_t len = strlen(str); 
+  inst->rebuild_command = (char*)malloc(PATH_MAX + len); 
+
+  unsigned int state = 0; 
+  const char *emit_flag = "--emit="; 
+  const size_t emit_len = 7; 
+  
+  int j = 0; 
+  for (unsigned int i=0; i<len; i++) {
+    unsigned char ch = str[i]; 
+    if (emit_flag[state] == ch) 
+      state++; 
+    else 
+      state = 0; 
+    
+    inst->rebuild_command[j++] = str[i]; 
+
+    if (state == emit_len) {
+      memcpy(inst->rebuild_command+j, "asm ", 4); 
+      j += 4;
+
+      /* skip the rest */
+      while (i < len) {
+        if (str[i] == ' ')
+          break;
+        else i++; 
+      }
+      state = 0; 
+    }
+  }
+  inst->rebuild_command[j] = '\0'; 
+
+  strcat(inst->rebuild_command, " -o - -C opt-level=3 2> /dev/null");  
+  if (check_tool("rustfilt")) 
+    strcat(inst->rebuild_command, " | rustfilt"); 
+
+  fprintf(stderr, "%s\n", inst->rebuild_command); 
+  return ASM_INST_OK; 
+}
+
+int AsmInstance_compile(AsmInstance *inst) 
 {
   char *cmd = AsmInstance_get_cmd(inst); 
   if (!cmd)
@@ -270,7 +349,7 @@ int AsmInstance_compile_C(AsmInstance *inst)
 }
 
 
-int AsmInstance_function_message_C(AsmInstance *inst, int client_fd)
+int AsmInstance_function_message(AsmInstance *inst, int client_fd)
 {
   size_t bytes; 
   char buffer[ASM_WINDOW]; 
@@ -418,9 +497,9 @@ jmp_write_message:
 }
 
 
-int AsmInstance_asm_message_C(AsmInstance *inst, int client_fd) 
+int AsmInstance_assembly_message(AsmInstance *inst, int client_fd) 
 {
-  if (AsmInstance_compile_C(inst) != ASM_INST_OK)  {
+  if (AsmInstance_compile(inst) != ASM_INST_OK)  {
     fprintf(stderr, "[asm viewer] error - failed to compile filtered assembly\n");
     return ASM_INST_FAIL; 
   }

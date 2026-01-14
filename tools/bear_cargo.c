@@ -104,8 +104,8 @@ int main(int argc, char *argv[])
                                     manifest_dir_label, 
                                     strlen(manifest_dir_label));  
       if (!manifest_point) {
-        fprintf(stderr, "Error: cargo format is not what this tool expects?\n"); 
-        return 1; 
+        fprintf(stderr, "Warning: cargo format command ignored\n"); 
+        continue;
       }
 
       for (char *ptr = manifest_point + manifest_label_len; ptr < end; ptr++) {
@@ -118,8 +118,8 @@ int main(int argc, char *argv[])
       char *command_ptr = memmem(line, len, 
                                  rustc_label, rustc_label_len); 
       if (!command_ptr) {
-        fprintf(stderr, "Error: cargo format is not what this tool expects?\n"); 
-        return 1; 
+        fprintf(stderr, "Warning: cargo format command ignored\n"); 
+        continue;
       }
      
       /* walk back till a space for a full command path */
@@ -132,14 +132,11 @@ int main(int argc, char *argv[])
       
       /* rust puts these weird blocks on the end of the commands */
       const unsigned char rust_term = '`';
-
       for (char *ptr = ++command_ptr; ptr < end; ptr++) {
         if (*ptr == rust_term || *ptr == '\n')
           break;
-        else 
-          build_command[build_len++] = *ptr;
+        build_command[build_len++] = *ptr;
       }
-
       build_command[build_len] = '\0';
 
       /* the src file is a combination of the directory, and the first rust file 
@@ -148,8 +145,8 @@ int main(int argc, char *argv[])
       char *src_ptr = memmem(build_command, build_len, 
                              ".rs ", 3); // space is important for conflicts
       if (!src_ptr) {
-        fprintf(stderr, "Error: cargo format is not what this tool expects?\n"); 
-        return 1; 
+        fprintf(stderr, "Warning: cargo format command ignored\n"); 
+        continue;
       }
 
       memcpy(src_file, directory, dir_len); 
